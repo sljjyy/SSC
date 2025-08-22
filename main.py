@@ -173,6 +173,25 @@ class StoryGeneratorApp:
         platform_combo.pack(side="left", padx=(10, 0))
         platform_combo.set("番茄小说")
         
+        # 情绪类型
+        emotion_type_frame = tk.Frame(self.step1_frame)
+        emotion_type_frame.pack(pady=5, padx=20, fill="x")
+        
+        emotion_type_label = tk.Label(emotion_type_frame, text="情绪类型:")
+        emotion_type_label.pack(side="left")
+        
+        # 使用Checkbutton实现多项选择
+        self.emotion_type_vars = []
+        emotion_types = ["甜宠", "虐文", "爽文", "反转", "励志"]
+        for i, emotion in enumerate(emotion_types):
+            var = tk.BooleanVar()
+            chk = tk.Checkbutton(emotion_type_frame, text=emotion, variable=var)
+            chk.pack(side="left", padx=(10, 0))
+            self.emotion_type_vars.append((emotion, var))
+            # 默认选中"爽文"
+            if emotion == "爽文":
+                var.set(True)
+        
         # 灵感输入
         inspiration_frame = tk.Frame(self.step1_frame)
         inspiration_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -355,6 +374,11 @@ class StoryGeneratorApp:
         story_type = self.story_type_var.get()
         dilemma_type = self.dilemma_type_var.get()
         platform = self.platform_var.get()
+        
+        # 获取多项选择的情绪类型
+        selected_emotions = [emotion for emotion, var in self.emotion_type_vars if var.get()]
+        emotion_type = ",".join(selected_emotions)  # 将选中的情绪类型用逗号连接
+        
         inspiration = self.inspiration_text.get("1.0", tk.END).strip()
         
         # 检查输入
@@ -369,6 +393,7 @@ class StoryGeneratorApp:
             "story_type": story_type,
             "dilemma_type": dilemma_type,
             "platform": platform,
+            "emotion_type": emotion_type,
             "inspiration": inspiration
         }
         
@@ -400,11 +425,12 @@ class StoryGeneratorApp:
         story_type = self.user_inputs["story_type"]
         dilemma_type = self.user_inputs["dilemma_type"]
         platform = self.user_inputs["platform"]
+        emotion_type = self.user_inputs["emotion_type"]
         inspiration = self.user_inputs["inspiration"]
         
         # 从配置文件中获取提示词模板并替换变量
         prompt_template = prompts["topic"]
-        prompt = prompt_template.format(story_type=story_type, inspiration=inspiration, dilemma_type=dilemma_type)
+        prompt = prompt_template.format(story_type=story_type, inspiration=inspiration, dilemma_type=dilemma_type, emotion_type=emotion_type)
         
         # 调用OpenAI API生成选题，增加max_tokens以确保完整输出
         topic = self._call_openai_api(prompt, 8192)
@@ -434,11 +460,13 @@ class StoryGeneratorApp:
         story_type = self.user_inputs["story_type"]
         dilemma_type = self.user_inputs["dilemma_type"]
         platform = self.user_inputs["platform"]
+        emotion_type = self.user_inputs["emotion_type"]
         inspiration = self.user_inputs["inspiration"]
         
         with open(os.path.join(self.story_dir, "topic.txt"), "w", encoding="utf-8") as f:
             f.write(f"故事类型：{story_type}\n")
             f.write(f"困境类型：{dilemma_type}\n")
+            f.write(f"情绪类型：{emotion_type}\n")
             f.write(f"投稿平台：{platform}\n")
             f.write(f"灵感：{inspiration}\n")
             f.write(f"选题：{topic}\n")

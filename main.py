@@ -6,9 +6,17 @@ from openai import OpenAI
 from http import HTTPStatus
 import json
 import threading
+import sys
+import os
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 # 读取配置文件
-with open('config.json', 'r', encoding='utf-8') as f:
+with open(resource_path('config.json'), 'r', encoding='utf-8') as f:
     config = json.load(f)
 
 # 初始化OpenAI客户端
@@ -38,12 +46,9 @@ def load_prompts():
         "supporting.prompt"
     ]
     
-    for file in prompt_files:
-        with open(f'prompts/{file}', 'r', encoding='utf-8') as f:
-            # 使用文件名（不含扩展名）作为键
-            key = file.split('.')[0]
-            prompts[key] = f.read()
-    
+    for file_name in prompt_files:
+        with open(resource_path(os.path.join('prompts', file_name)), 'r', encoding='utf-8') as f:
+            prompts[file_name] = f.read()
     return prompts
 
 prompts = load_prompts()

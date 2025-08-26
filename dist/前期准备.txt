@@ -1,0 +1,36 @@
+文学创作辅助工具使用说明
+========================
+
+感谢您使用文学创作辅助工具！
+
+运行说明：
+---------
+1. 请确保您的计算机上安装了最新版本的Microsoft Visual C++ Redistributable。
+2. 双击"文学创作辅助工具.exe"文件即可运行程序。
+
+首次运行配置：
+-------------
+1. 程序需要一个config.json文件来配置API密钥和其他设置。
+2. 如果您是首次运行，请按照以下步骤操作：
+   a. 在exe文件所在目录创建一个名为config.json的文件
+   b. 将以下内容复制到config.json文件中：
+      {
+        "api_key": "your-api-key-here",
+        "model": "deepseek-chat",
+        "base_url": "https://api.deepseek.com/v1"
+      }
+   c. 将"your-api-key-here"替换为您从DeepSeek获取的实际API密钥
+
+获取API密钥：
+-------------
+1. 访问 https://platform.deepseek.com/
+2. 登录或注册账户
+3. 点击左侧菜单的"模型"
+4. 选择"Deepseek"模型
+5. 点击"创建API密钥"
+6. 输入密钥名称，然后点击"复制"以获取API密钥
+7. 将复制的API密钥粘贴到config.json文件的api_key字段中
+
+技术支持：
+---------
+如果您在使用过程中遇到任何问题，请联系技术支持。

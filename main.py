@@ -12,14 +12,82 @@ with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
 # 初始化OpenAI客户端
-client = OpenAI(
-    api_key=config["api_key"],
-    base_url=config["base_url"]
-)
+def init_openai_client(api_key, base_url):
+    return OpenAI(
+        api_key=api_key,
+        base_url=base_url
+    )
 
-# 根据配置选择模型
-def get_model():
-    return config["model"]
+# 初始化硅基流动API客户端
+def init_siliconflow_client(api_key):
+    return OpenAI(
+        api_key=api_key,
+        base_url="https://api.siliconflow.cn/v1"
+    )
+
+# 初始化Deepseek API客户端
+def init_deepseek_client(api_key):
+    return OpenAI(
+        api_key=api_key,
+        base_url="https://api.deepseek.com/v1"
+    )
+
+# 初始化客户端
+def init_client(platform, api_key, base_url=None):
+    if platform == "siliconflow":
+        return init_siliconflow_client(api_key)
+    elif platform == "deepseek":
+        return init_deepseek_client(api_key)
+    else:
+        # 默认使用deepseek作为后备选项
+        return init_deepseek_client(api_key)
+
+# 模型显示名称到实际ID的映射
+model_display_names = {
+    "[16]千问": "Qwen/Qwen3-235B-A22B",
+    "[4]千问长文": "Tongyi-Zhiwen/QwenLong-L1-32B",
+    "[14]智普清言": "zai-org/GLM-4.5",
+    "[16]Deepseek": "deepseek-ai/DeepSeek-V3.1",
+    "[8]DeepseekR1": "deepseek-ai/DeepSeek-R1",
+    "[免费]DSR1+Qwen3": "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+    "[4]腾讯混元": "tencent/Hunyuan-A13B-Instruct"
+}
+
+# 获取平台支持的模型（返回显示名称）
+def get_platform_models(platform):
+    if platform == "siliconflow":
+        return ["[16]千问", "[4]千问长文", "[14]智普清言", "[16]Deepseek", "[8]DeepseekR1","[4]腾讯混元","[免费]DSR1+Qwen3"]
+    elif platform == "deepseek":
+        return ["deepseek-chat", "deepseek-llm-7b-chat", "deepseek-coder"]
+    else:
+        return ["deepseek-chat"]
+
+# 获取实际的模型ID
+def get_actual_model_id(display_name):
+    return model_display_names.get(display_name, display_name)
+
+# 全局客户端和模型配置
+clients = {}
+platform_model_configs = {}
+current_platform = "siliconflow"
+current_model = "千问"
+
+# 初始化默认客户端
+# 根据当前平台类型选择正确的API密钥
+if current_platform == "siliconflow":
+    api_key = config.get("siliconflow_api_key", config["api_key"])
+elif current_platform == "deepseek":
+    api_key = config.get("deepseek_api_key", config["api_key"])
+else:
+    api_key = config["api_key"]
+clients[current_platform] = init_client(current_platform, api_key)
+
+# 存储各环节的平台和模型选择
+for step in range(1, 8):
+    platform_model_configs[f"step{step}"] = {
+        "platform": current_platform,
+        "model": current_model
+    }
 
 # 读取提示词配置文件
 def load_prompts():
@@ -73,12 +141,16 @@ class StoryGeneratorApp:
         
     def create_widgets(self):
         # 标题
-        title_label = tk.Label(self.root, text="文学创作辅助工具", font=("Arial", 16, "bold"))
+        title_label = tk.Label(self.root, text="文学创作辅助工具", font=('Arial', 16, 'bold'))
         title_label.pack(pady=10)
         
         # 创建 Notebook 控件用于分步显示
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # 平台和模型选择变量
+        self.platform_vars = {}
+        self.model_vars = {}
         
         # 第一步：输入参数
         self.step1_frame = tk.Frame(self.notebook)
@@ -115,7 +187,77 @@ class StoryGeneratorApp:
         self.notebook.add(self.step7_frame, text="7. 标题和导语")
         self.create_step7_widgets()
         
+    def create_platform_model_selector(self, parent, step):
+        """
+        在指定的父窗口中创建平台和模型选择控件
+        
+        Args:
+            parent: 父窗口控件
+            step: 当前步骤编号
+        """
+        # 创建平台和模型选择框架
+        api_frame = tk.Frame(parent)
+        api_frame.pack(pady=5, padx=20, fill="x")
+        
+        # 平台选择
+        platform_label = tk.Label(api_frame, text="AI平台:")
+        platform_label.pack(side="left")
+        
+        self.platform_vars[step] = tk.StringVar()
+        platforms = ["siliconflow", "deepseek"]
+        platform_combo = ttk.Combobox(api_frame, textvariable=self.platform_vars[step], 
+                                     values=platforms, width=10)
+        platform_combo.pack(side="left", padx=(10, 0))
+        
+        # 设置默认平台
+        default_platform = platform_model_configs.get(f"step{step}", {}).get("platform", current_platform)
+        self.platform_vars[step].set(default_platform)
+        
+        # 模型选择
+        model_label = tk.Label(api_frame, text="模型:")
+        model_label.pack(side="left", padx=(10, 0))
+        
+        self.model_vars[step] = tk.StringVar()
+        model_combo = ttk.Combobox(api_frame, textvariable=self.model_vars[step], width=20)
+        model_combo.pack(side="left", padx=(10, 0))
+        
+        # 更新模型列表的函数
+        def update_models(*args):
+            selected_platform = self.platform_vars[step].get()
+            models = get_platform_models(selected_platform)
+            model_combo['values'] = models
+            # 设置默认模型
+            default_model = platform_model_configs.get(f"step{step}", {}).get("model", current_model)
+            if default_model in models:
+                self.model_vars[step].set(default_model)
+            else:
+                self.model_vars[step].set(models[0] if models else "")
+            # 保存配置
+            platform_model_configs[f"step{step}"] = {
+                "platform": selected_platform,
+                "model": self.model_vars[step].get()
+            }
+        
+        # 保存模型选择的函数
+        def save_model_selection(*args):
+            platform_model_configs[f"step{step}"] = {
+                "platform": self.platform_vars[step].get(),
+                "model": self.model_vars[step].get()
+            }
+        
+        # 绑定事件
+        self.platform_vars[step].trace("w", update_models)
+        self.model_vars[step].trace("w", save_model_selection)
+        
+        # 初始化模型列表
+        update_models()
+        
+        return api_frame
+        
     def create_step1_widgets(self):
+        # 添加平台和模型选择控件
+        self.create_platform_model_selector(self.step1_frame, 1)
+        
         # 获取已有的故事目录
         story_dirs = []
         if os.path.exists(self.stories_base_dir):
@@ -213,6 +355,9 @@ class StoryGeneratorApp:
         exit_button.pack(side="left", padx=10)
         
     def create_step2_widgets(self):
+        # 添加平台和模型选择控件
+        self.create_platform_model_selector(self.step2_frame, 2)
+        
         # 选题编辑区域
         topic_frame = tk.Frame(self.step2_frame)
         topic_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -237,6 +382,9 @@ class StoryGeneratorApp:
         self.save_topic_button.pack(side="left", padx=10)
         
     def create_step3_widgets(self):
+        # 添加平台和模型选择控件
+        self.create_platform_model_selector(self.step3_frame, 3)
+        
         # 人设编辑区域
         characters_frame = tk.Frame(self.step3_frame)
         characters_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -261,6 +409,9 @@ class StoryGeneratorApp:
         self.save_characters_button.pack(side="left", padx=10)
         
     def create_step4_widgets(self):
+        # 添加平台和模型选择控件
+        self.create_platform_model_selector(self.step4_frame, 4)
+        
         # 粗纲编辑区域
         outline_frame = tk.Frame(self.step4_frame)
         outline_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -285,6 +436,9 @@ class StoryGeneratorApp:
         self.save_outline_button.pack(side="left", padx=10)
         
     def create_step5_widgets(self):
+        # 添加平台和模型选择控件
+        self.create_platform_model_selector(self.step5_frame, 5)
+        
         # 细纲编辑区域
         detailed_outline_frame = tk.Frame(self.step5_frame)
         detailed_outline_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -309,6 +463,9 @@ class StoryGeneratorApp:
         self.save_detailed_outline_button.pack(side="left", padx=10)
         
     def create_step6_widgets(self):
+        # 添加平台和模型选择控件
+        self.create_platform_model_selector(self.step6_frame, 6)
+        
         # 正文编辑区域
         content_frame = tk.Frame(self.step6_frame)
         content_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -333,6 +490,9 @@ class StoryGeneratorApp:
         self.save_content_button.pack(side="left", padx=10)
         
     def create_step7_widgets(self):
+        # 添加平台和模型选择控件
+        self.create_platform_model_selector(self.step7_frame, 7)
+        
         # 标题和导语编辑区域
         title_intro_frame = tk.Frame(self.step7_frame)
         title_intro_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -695,8 +855,8 @@ class StoryGeneratorApp:
             prompt_template = prompts["detailed_outline_first"]
             prompt = prompt_template.format(topic=topic, characters=characters, outline=outline_text,outlineTemp=outline_lines[0])
             
-            # 调用通义千问API生成细纲，传递会话历史
-            detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history)
+            # 调用API生成细纲，传递会话历史和当前步骤
+            detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
             detailed_outline_parts.append(detailed_outline_part)
             
             # 更新会话历史
@@ -723,8 +883,8 @@ class StoryGeneratorApp:
             prompt_template = prompts["detailed_outline_subsequent"]
             prompt = prompt_template.format(topic=topic, characters=characters, outline_text=outlineTemp,outlineTime=outlineTemp)
             
-            # 调用通义千问API生成细纲，传递会话历史
-            detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history)
+            # 调用API生成细纲，传递会话历史和当前步骤
+            detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
             detailed_outline_parts.append(detailed_outline_part)
             
             # 更新会话历史
@@ -852,8 +1012,8 @@ class StoryGeneratorApp:
             prompt_template = prompts["content_first"]
             prompt = prompt_template.format(characters=characters, selected_detailed_outline=selected_detailed_outline,detailed_outline=detailed_outline)
             
-            # 调用通义千问API生成正文
-            content_part = self._call_openai_api(prompt, 8000, False, conversation_history)
+            # 调用API生成正文，传递当前步骤
+            content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)
             content_parts.append(content_part.strip())
             # 实时更新UI
             self.content_text.insert(tk.END, f"\n\n\n\n{1:03d}\n\n" + content_part)
@@ -871,8 +1031,8 @@ class StoryGeneratorApp:
             prompt_template = prompts["content_subsequent"]
             prompt = prompt_template.format(topic=topic, characters=characters, selected_detailed_outline=selected_detailed_outline)
             
-            # 调用通义千问API生成正文
-            content_part = self._call_openai_api(prompt, 8000, False, conversation_history)
+            # 调用API生成正文，传递当前步骤
+            content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)
             content_parts.append(content_part.strip())
             # 实时更新UI
             self.content_text.insert(tk.END, f"\n\n{i+1:03d}\n" + content_part)
@@ -927,21 +1087,32 @@ class StoryGeneratorApp:
         
         return detailed_outline_lines
     
-    def _call_openai_api(self, prompt, max_tokens, update_ui=True, conversation_history=None):
+    def _call_openai_api(self, prompt, max_tokens, update_ui=True, conversation_history=None, step=None):
         """
-        调用OpenAI API的通用方法
+        调用AI API的通用方法，支持多平台和多模型
         
         Args:
             prompt (str): 提示词
             max_tokens (int): 最大token数
             update_ui (bool): 是否实时更新UI，默认为True
             conversation_history (list): 会话历史，默认为None
+            step (int): 当前步骤，用于选择对应的平台和模型
         
         Returns:
             str: API返回的内容
         """
         try:
-            print(f"调用API，提示词长度: {len(prompt)}, max_tokens: {max_tokens}")
+            # 如果没有指定步骤，使用当前步骤
+            if step is None:
+                step = self.current_step
+            
+            # 获取当前步骤的平台和模型配置
+            step_config = platform_model_configs.get(f"step{step}", {})
+            platform = step_config.get("platform", current_platform)
+            model = step_config.get("model", current_model)
+            
+            print(f"调用API，平台: {platform}, 模型: {model}, 提示词长度: {len(prompt)}, max_tokens: {max_tokens}")
+            
             # 构造消息列表
             if conversation_history:
                 messages = conversation_history.copy()
@@ -949,8 +1120,29 @@ class StoryGeneratorApp:
             else:
                 messages = [{'role': 'user', 'content': prompt}]
             
-            response = client.chat.completions.create(
-                model=get_model(),
+            # 确保客户端已初始化
+            if platform not in clients:
+                # 尝试使用默认的API密钥初始化
+                if platform == "siliconflow":
+                    # 假设config中有siliconflow_api_key
+                    api_key = config.get("siliconflow_api_key", config["api_key"])
+                    clients[platform] = init_client(platform, api_key)
+                elif platform == "deepseek":
+                    # Deepseek平台只需要API密钥
+                    api_key = config.get("deepseek_api_key", config["api_key"])
+                    clients[platform] = init_client(platform, api_key)
+                else:
+                    # 其他平台可能需要base_url
+                    api_key = config["api_key"]
+                    base_url = config.get("base_url", "")
+                    clients[platform] = init_client(platform, api_key, base_url)
+            
+            # 获取实际的模型ID
+            actual_model_id = get_actual_model_id(model)
+            
+            # 调用对应的API
+            response = clients[platform].chat.completions.create(
+                model=actual_model_id,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=0.8,
@@ -1044,16 +1236,16 @@ class StoryGeneratorApp:
         # 不再限制正文内容长度
         title_prompt = title_prompt_template.format(topic=topic, characters=characters, content=content)
         
-        # 调用OpenAI API生成标题
-        title = self._call_openai_api(title_prompt, 8192)
+        # 调用API生成标题，传递当前步骤
+        title = self._call_openai_api(title_prompt, 8192, step=7)
         title = title.strip()
         
         # 生成导语
         intro_prompt_template = prompts["intro"]
         intro_prompt = intro_prompt_template.format(topic=topic, characters=characters, content=content)
         
-        # 调用OpenAI API生成导语
-        intro = self._call_openai_api(intro_prompt, 8192)
+        # 调用API生成导语，传递当前步骤
+        intro = self._call_openai_api(intro_prompt, 8192, step=7)
         intro = intro.strip()
         
         # 保存生成的内容

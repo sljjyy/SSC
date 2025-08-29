@@ -2,11 +2,13 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import os
 import datetime
+import time
 from openai import OpenAI
 from http import HTTPStatus
 import json
 import threading
 
+TIME_SLEEP = 20
 # 读取配置文件
 with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
@@ -72,6 +74,41 @@ platform_model_configs = {}
 current_platform = "siliconflow"
 current_model = "千问"
 
+# 保存平台模型配置到文件
+def save_platform_model_configs():
+    try:
+        # 读取现有的配置
+        config_data = {}
+        if os.path.exists('config.json'):
+            with open('config.json', 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+        
+        # 添加或更新平台模型配置
+        config_data['platform_model_configs'] = platform_model_configs
+        
+        # 保存配置到文件
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, ensure_ascii=False, indent=2)
+        print("平台模型配置已保存到config.json")
+    except Exception as e:
+        print(f"保存平台模型配置失败: {e}")
+
+# 从文件加载平台模型配置
+def load_platform_model_configs():
+    global platform_model_configs
+    try:
+        if os.path.exists('config.json'):
+            with open('config.json', 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+                if 'platform_model_configs' in config_data:
+                    platform_model_configs = config_data['platform_model_configs']
+                    print("已从config.json加载平台模型配置")
+    except Exception as e:
+        print(f"加载平台模型配置失败: {e}")
+
+# 加载保存的平台模型配置
+load_platform_model_configs()
+
 # 初始化默认客户端
 # 根据当前平台类型选择正确的API密钥
 if current_platform == "siliconflow":
@@ -135,6 +172,14 @@ class StoryGeneratorApp:
         # 存储用户输入和生成内容
         self.user_inputs = {}
         self.generated_content = {}
+        
+        # 平台和模型选择相关变量
+        self.platform_vars = {}
+        self.model_vars = {}
+        
+        # 中断和恢复相关状态
+        self.is_interrupted = False
+        self.current_generation_state = {}
         
         # 创建界面
         self.create_widgets()
@@ -232,18 +277,23 @@ class StoryGeneratorApp:
                 self.model_vars[step].set(default_model)
             else:
                 self.model_vars[step].set(models[0] if models else "")
-            # 保存配置
+            # 保存配置到内存
             platform_model_configs[f"step{step}"] = {
                 "platform": selected_platform,
                 "model": self.model_vars[step].get()
             }
+            # 保存配置到文件
+            save_platform_model_configs()
         
         # 保存模型选择的函数
         def save_model_selection(*args):
+            # 保存配置到内存
             platform_model_configs[f"step{step}"] = {
                 "platform": self.platform_vars[step].get(),
                 "model": self.model_vars[step].get()
             }
+            # 保存配置到文件
+            save_platform_model_configs()
         
         # 绑定事件
         self.platform_vars[step].trace("w", update_models)
@@ -459,6 +509,11 @@ class StoryGeneratorApp:
         self.regenerate_detailed_outline_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_detailed_outline, bg="#2196F3", fg="white", padx=20)
         self.regenerate_detailed_outline_button.pack(side="left", padx=10)
         
+        self.continue_detailed_outline_button = tk.Button(button_frame, text="中断后继续", command=self.continue_detailed_outline, bg="#9C27B0", fg="white", padx=20)
+        self.continue_detailed_outline_button.pack(side="left", padx=10)
+        # 默认禁用继续按钮，只有在中断时才启用
+        self.continue_detailed_outline_button.config(state=tk.DISABLED)
+        
         self.save_detailed_outline_button = tk.Button(button_frame, text="保存并继续", command=self.save_detailed_outline_and_continue, bg="#4CAF50", fg="white", padx=20)
         self.save_detailed_outline_button.pack(side="left", padx=10)
         
@@ -485,6 +540,11 @@ class StoryGeneratorApp:
         
         self.regenerate_content_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_content, bg="#2196F3", fg="white", padx=20)
         self.regenerate_content_button.pack(side="left", padx=10)
+        
+        self.continue_content_button = tk.Button(button_frame, text="中断后继续", command=self.continue_content, bg="#9C27B0", fg="white", padx=20)
+        self.continue_content_button.pack(side="left", padx=10)
+        # 默认禁用继续按钮，只有在中断时才启用
+        self.continue_content_button.config(state=tk.DISABLED)
         
         self.save_content_button = tk.Button(button_frame, text="保存并继续", command=self.save_content_and_continue, bg="#4CAF50", fg="white", padx=20)
         self.save_content_button.pack(side="left", padx=10)
@@ -845,51 +905,112 @@ class StoryGeneratorApp:
         # 初始化会话历史
         conversation_history = []
         
-        # 处理粗纲数组的0,-1,-2位置（单独1组）
-        if len(outline_lines) >= 3:
-            # 构造提示词，包含粗纲的0,-1,-2位置
-            selected_outline = [outline_lines[0], outline_lines[-2], outline_lines[-1]]
-            outline_text = "\n".join(selected_outline)
-            
-            # 从配置文件中获取第一组提示词模板并替换变量
-            prompt_template = prompts["detailed_outline_first"]
-            prompt = prompt_template.format(topic=topic, characters=characters, outline=outline_text,outlineTemp=outline_lines[0])
-            
-            # 调用API生成细纲，传递会话历史和当前步骤
-            detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
-            detailed_outline_parts.append(detailed_outline_part)
-            
-            # 更新会话历史
-            conversation_history.append({'role': 'user', 'content': prompt})
-            conversation_history.append({'role': 'assistant', 'content': detailed_outline_part})
+        # 检查是否有中断状态需要恢复
+        resume_state = self.current_generation_state.get('detailed_outline', {})
+        start_index = resume_state.get('current_index', 0)
+        if resume_state.get('detailed_outline_parts'):
+            detailed_outline_parts = resume_state['detailed_outline_parts']
+        if resume_state.get('conversation_history'):
+            conversation_history = resume_state['conversation_history']
         
-        # 处理粗纲数组的其他位置（每次步长为2，但在处理第1、倒数第一、倒数第二项时步长为1）
-        i = 1
-        while i < len(outline_lines):
+        # 重置中断标记
+        self.is_interrupted = False
+        
+        try:
+            # 处理粗纲数组的0,-1,-2位置（单独1组） - 如果是第一次执行
+            if len(outline_lines) >= 3 and start_index == 0:
+                # 构造提示词，包含粗纲的0,-1,-2位置
+                selected_outline = [outline_lines[0], outline_lines[-2], outline_lines[-1]]
+                outline_text = "\n".join(selected_outline)
+                
+                # 从配置文件中获取第一组提示词模板并替换变量
+                prompt_template = prompts["detailed_outline_first"]
+                prompt = prompt_template.format(topic=topic, characters=characters, outline=outline_text,outlineTemp=outline_lines[0])
+                
+                # 调用API生成细纲，传递会话历史和当前步骤
+                detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
+                
+                # 检查是否中断
+                if detailed_outline_part == "<GENERATION_INTERRUPTED>":
+                    self.current_generation_state['detailed_outline'] = {
+                        'current_index': 0,
+                        'detailed_outline_parts': detailed_outline_parts,
+                        'conversation_history': conversation_history,
+                        'outline_lines': outline_lines,
+                        'topic': topic,
+                        'characters': characters
+                    }
+                    # 启用继续按钮
+                    self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.NORMAL))
+                    return
+                
+                detailed_outline_parts.append(detailed_outline_part)
+                
+                # 更新会话历史
+                conversation_history.append({'role': 'user', 'content': prompt})
+                conversation_history.append({'role': 'assistant', 'content': detailed_outline_part})
+                
+                # 更新当前进度
+                start_index = 1
             
-            # 检查是否是第1、倒数第一、倒数第二项
-            if i == 1 or i == len(outline_lines) - 1 or i == len(outline_lines) - 2:
-                # 步长为1
-                selected_outline = [outline_lines[i]]
-                outlineTemp = outline_lines[i]
-                i += 1
-            else:
-                # 步长为2
-                selected_outline = outline_lines[i:i+2]
-                outlineTemp = "\n".join(selected_outline)
-                i += 2
-            print(outlineTemp+"\n")
-            # 从配置文件中获取后续提示词模板并替换变量
-            prompt_template = prompts["detailed_outline_subsequent"]
-            prompt = prompt_template.format(topic=topic, characters=characters, outline_text=outlineTemp,outlineTime=outlineTemp)
-            
-            # 调用API生成细纲，传递会话历史和当前步骤
-            detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
-            detailed_outline_parts.append(detailed_outline_part)
-            
-            # 更新会话历史
-            conversation_history.append({'role': 'user', 'content': prompt})
-            conversation_history.append({'role': 'assistant', 'content': detailed_outline_part})
+            # 处理粗纲数组的其他位置（每次步长为2，但在处理第1、倒数第一、倒数第二项时步长为1）
+            i = start_index
+            while i < len(outline_lines) and not self.is_interrupted:
+                
+                # 检查是否是第1、倒数第一、倒数第二项
+                if i == 1 or i == len(outline_lines) - 1 or i == len(outline_lines) - 2:
+                    # 步长为1
+                    selected_outline = [outline_lines[i]]
+                    outlineTemp = outline_lines[i]
+                    i += 1
+                else:
+                    # 步长为2
+                    selected_outline = outline_lines[i:i+2]
+                    outlineTemp = "\n".join(selected_outline)
+                    i += 2
+                
+                print(outlineTemp+"\n")
+                # 从配置文件中获取后续提示词模板并替换变量
+                prompt_template = prompts["detailed_outline_subsequent"]
+                prompt = prompt_template.format(topic=topic, characters=characters, outline_text=outlineTemp,outlineTime=outlineTemp)
+                
+                # 调用API生成细纲，传递会话历史和当前步骤
+                detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
+                
+                # 检查是否中断
+                if detailed_outline_part == "<GENERATION_INTERRUPTED>":
+                    self.current_generation_state['detailed_outline'] = {
+                        'current_index': i,
+                        'detailed_outline_parts': detailed_outline_parts,
+                        'conversation_history': conversation_history,
+                        'outline_lines': outline_lines,
+                        'topic': topic,
+                        'characters': characters
+                    }
+                    # 启用继续按钮
+                    self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.NORMAL))
+                    return
+                
+                detailed_outline_parts.append(detailed_outline_part)
+                
+                # 更新会话历史
+                conversation_history.append({'role': 'user', 'content': prompt})
+                conversation_history.append({'role': 'assistant', 'content': detailed_outline_part})
+        except Exception as e:
+            print(f"细纲生成异常: {e}")
+            # 如果是中断异常，记录当前状态
+            if self.is_interrupted:
+                self.current_generation_state['detailed_outline'] = {
+                    'current_index': i if 'i' in locals() else 0,
+                    'detailed_outline_parts': detailed_outline_parts,
+                    'conversation_history': conversation_history,
+                    'outline_lines': outline_lines,
+                    'topic': topic,
+                    'characters': characters
+                }
+                # 启用继续按钮
+                self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.NORMAL))
+            return
         
         # 合并所有细纲部分
         detailed_outline = "\n\n".join(detailed_outline_parts)
@@ -913,6 +1034,126 @@ class StoryGeneratorApp:
         self.detailed_outline_text.delete(1.0, tk.END)
         # 重新生成细纲
         self.generate_detailed_outline()
+        
+    def continue_detailed_outline(self):
+        """
+        从中断处继续生成细纲
+        """
+        # 检查是否有中断状态
+        if 'detailed_outline' not in self.current_generation_state:
+            messagebox.showinfo("提示", "没有检测到中断的细纲生成任务。")
+            return
+        
+        # 获取中断状态
+        resume_state = self.current_generation_state['detailed_outline']
+        
+        # 禁用按钮
+        self.save_detailed_outline_button.config(state=tk.DISABLED)
+        self.regenerate_detailed_outline_button.config(state=tk.DISABLED)
+        self.continue_detailed_outline_button.config(state=tk.DISABLED)
+        
+        # 在新线程中继续生成
+        threading.Thread(target=lambda: self._async_continue_detailed_outline(resume_state), daemon=True).start()
+        
+    def _async_continue_detailed_outline(self, resume_state):
+        """
+        异步从中断处继续生成细纲
+        """
+        try:
+            # 从中断状态中恢复参数
+            current_index = resume_state.get('current_index', 0)
+            detailed_outline_parts = resume_state.get('detailed_outline_parts', [])
+            conversation_history = resume_state.get('conversation_history', [])
+            outline_lines = resume_state.get('outline_lines', [])
+            topic = resume_state.get('topic', "")
+            characters = resume_state.get('characters', "")
+            
+            # 重置中断标记
+            self.is_interrupted = False
+            
+            # 继续处理未完成的部分
+            i = current_index
+            while i < len(outline_lines) and not self.is_interrupted:
+                
+                # 检查是否是第1、倒数第一、倒数第二项
+                if i == 1 or i == len(outline_lines) - 1 or i == len(outline_lines) - 2:
+                    # 步长为1
+                    selected_outline = [outline_lines[i]]
+                    outlineTemp = outline_lines[i]
+                    i += 1
+                else:
+                    # 步长为2
+                    selected_outline = outline_lines[i:i+2]
+                    outlineTemp = "\n".join(selected_outline)
+                    i += 2
+                
+                print(outlineTemp+"\n")
+                # 从配置文件中获取后续提示词模板并替换变量
+                prompt_template = prompts["detailed_outline_subsequent"]
+                prompt = prompt_template.format(topic=topic, characters=characters, outline_text=outlineTemp,outlineTime=outlineTemp)
+                
+                # 调用API生成细纲，传递会话历史和当前步骤
+                detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
+                
+                # 检查是否中断
+                if detailed_outline_part == "<GENERATION_INTERRUPTED>":
+                    self.current_generation_state['detailed_outline'] = {
+                        'current_index': i,
+                        'detailed_outline_parts': detailed_outline_parts,
+                        'conversation_history': conversation_history,
+                        'outline_lines': outline_lines,
+                        'topic': topic,
+                        'characters': characters
+                    }
+                    # 重新启用继续按钮
+                    self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.NORMAL))
+                    return
+                
+                detailed_outline_parts.append(detailed_outline_part)
+                
+                # 更新会话历史
+                conversation_history.append({'role': 'user', 'content': prompt})
+                conversation_history.append({'role': 'assistant', 'content': detailed_outline_part})
+                
+            # 如果完成了所有部分，清理中断状态
+            if i >= len(outline_lines) and not self.is_interrupted:
+                # 合并所有细纲部分
+                detailed_outline = "\n\n".join(detailed_outline_parts)
+                
+                # 保存生成的内容
+                self.generated_content["detailed_outline"] = detailed_outline
+                
+                # 在UI中显示细纲
+                self.root.after(0, lambda: self.detailed_outline_text.delete("1.0", tk.END))
+                self.root.after(0, lambda: self.detailed_outline_text.insert("1.0", detailed_outline))
+                
+                # 切换到细纲页面
+                self.root.after(0, lambda: self.notebook.select(self.step5_frame))
+                
+                # 清理中断状态
+                if 'detailed_outline' in self.current_generation_state:
+                    del self.current_generation_state['detailed_outline']
+                    # 禁用继续按钮
+                    self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.DISABLED))
+            
+        except Exception as e:
+            print(f"继续生成细纲异常: {e}")
+            # 如果是中断异常，记录当前状态
+            if self.is_interrupted:
+                self.current_generation_state['detailed_outline'] = {
+                    'current_index': i,
+                    'detailed_outline_parts': detailed_outline_parts,
+                    'conversation_history': conversation_history,
+                    'outline_lines': outline_lines,
+                    'topic': topic,
+                    'characters': characters
+                }
+            # 重新启用继续按钮
+            self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.NORMAL))
+        finally:
+            # 重新启用按钮
+            self.root.after(0, lambda: self.save_detailed_outline_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.regenerate_detailed_outline_button.config(state=tk.NORMAL))
         
     def save_detailed_outline_and_continue(self):
         # 保存细纲
@@ -1003,43 +1244,117 @@ class StoryGeneratorApp:
         content_parts = []
         conversation_history = []
         
-        # 处理细纲数组的第一个位置
-        if len(detailed_outline_lines) > 0:
-            # 构造提示词，包含细纲的第一个位置
-            selected_detailed_outline = detailed_outline_lines[0]
-            
-            # 从配置文件中获取第一组提示词模板并替换变量
-            prompt_template = prompts["content_first"]
-            prompt = prompt_template.format(characters=characters, selected_detailed_outline=selected_detailed_outline,detailed_outline=detailed_outline)
-            
-            # 调用API生成正文，传递当前步骤
-            content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)
-            content_parts.append(content_part.strip())
-            # 实时更新UI
-            self.content_text.insert(tk.END, f"\n\n\n\n{1:03d}\n\n" + content_part)
-            self.root.update_idletasks()
-            # 更新会话历史
-            conversation_history.append({'role': 'user', 'content': prompt})
-            conversation_history.append({'role': 'assistant', 'content': content_part})
+        # 检查是否有中断状态需要恢复
+        resume_state = self.current_generation_state.get('content', {})
+        start_index = resume_state.get('current_index', 0)
+        if resume_state.get('content_parts'):
+            content_parts = resume_state['content_parts']
+        if resume_state.get('conversation_history'):
+            conversation_history = resume_state['conversation_history']
         
-        # 处理细纲数组的其他位置（每次使用1个）
-        for i in range(1, len(detailed_outline_lines)):
-            # 构造提示词，包含细纲的i位置
-            selected_detailed_outline = detailed_outline_lines[i]
-            print(selected_detailed_outline+"\n")
-            # 从配置文件中获取后续提示词模板并替换变量
-            prompt_template = prompts["content_subsequent"]
-            prompt = prompt_template.format(topic=topic, characters=characters, selected_detailed_outline=selected_detailed_outline)
+        # 重置中断标记
+        self.is_interrupted = False
+        
+        try:
+            # 处理细纲数组的第一个位置 - 如果是第一次执行
+            if len(detailed_outline_lines) > 0 and start_index == 0:
+                # 构造提示词，包含细纲的第一个位置
+                selected_detailed_outline = detailed_outline_lines[0]
+                
+                # 从配置文件中获取第一组提示词模板并替换变量
+                prompt_template = prompts["content_first"]
+                prompt = prompt_template.format(characters=characters, selected_detailed_outline=selected_detailed_outline,detailed_outline=detailed_outline)
+                
+                # 调用API生成正文，传递当前步骤
+                content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)
+                
+                # 检查是否中断
+                if content_part == "<GENERATION_INTERRUPTED>":
+                    self.current_generation_state['content'] = {
+                        'current_index': 0,
+                        'content_parts': content_parts,
+                        'conversation_history': conversation_history,
+                        'detailed_outline_lines': detailed_outline_lines,
+                        'topic': topic,
+                        'characters': characters,
+                        'detailed_outline': detailed_outline
+                    }
+                    # 启用继续按钮
+                    self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
+                    return
+                
+                content_parts.append(content_part.strip())
+                # 实时更新UI
+                self.content_text.insert(tk.END, f"\n\n{1:03d}\n" + content_part)
+                self.root.update_idletasks()
+                # 更新会话历史
+                conversation_history.append({'role': 'user', 'content': prompt})
+                conversation_history.append({'role': 'assistant', 'content': content_part})
+                               
+                # 添加10秒延迟以减少请求频率，避免触发TPM限制
+                print("等待%d秒以避免请求限制...",TIME_SLEEP)
+                time.sleep(TIME_SLEEP)
+                
+                # 更新当前进度
+                start_index = 1
             
-            # 调用API生成正文，传递当前步骤
-            content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)
-            content_parts.append(content_part.strip())
-            # 实时更新UI
-            self.content_text.insert(tk.END, f"\n\n{i+1:03d}\n" + content_part)
-            self.root.update_idletasks()
-            # 更新会话历史
-            conversation_history.append({'role': 'user', 'content': prompt})
-            conversation_history.append({'role': 'assistant', 'content': content_part})
+            # 处理细纲数组的其他位置（每次使用1个）
+            for i in range(start_index, len(detailed_outline_lines)):
+                if self.is_interrupted:
+                    break
+                    
+                # 构造提示词，包含细纲的i位置
+                selected_detailed_outline = detailed_outline_lines[i]
+                print(selected_detailed_outline+"\n")
+                # 从配置文件中获取后续提示词模板并替换变量
+                prompt_template = prompts["content_subsequent"]
+                prompt = prompt_template.format(topic=topic, characters=characters, selected_detailed_outline=selected_detailed_outline)
+                
+                # 调用API生成正文，传递当前步骤
+                content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)
+                
+                # 检查是否中断
+                if content_part == "<GENERATION_INTERRUPTED>":
+                    self.current_generation_state['content'] = {
+                        'current_index': i,
+                        'content_parts': content_parts,
+                        'conversation_history': conversation_history,
+                        'detailed_outline_lines': detailed_outline_lines,
+                        'topic': topic,
+                        'characters': characters,
+                        'detailed_outline': detailed_outline
+                    }
+                    # 启用继续按钮
+                    self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
+                    return
+                
+                content_parts.append(content_part.strip())
+                # 实时更新UI
+                self.content_text.insert(tk.END, f"\n\n{i+1:03d}\n" + content_part)
+                self.root.update_idletasks()
+                # 更新会话历史
+                conversation_history.append({'role': 'user', 'content': prompt})
+                conversation_history.append({'role': 'assistant', 'content': content_part})
+                
+                # 添加10秒延迟以减少请求频率，避免触发TPM限制
+                print("等待%d秒以避免请求限制...",TIME_SLEEP)
+                time.sleep(TIME_SLEEP)
+        except Exception as e:
+            print(f"正文生成异常: {e}")
+            # 如果是中断异常，记录当前状态
+            if self.is_interrupted:
+                self.current_generation_state['content'] = {
+                    'current_index': i if 'i' in locals() else start_index,
+                    'content_parts': content_parts,
+                    'conversation_history': conversation_history,
+                    'detailed_outline_lines': detailed_outline_lines,
+                    'topic': topic,
+                    'characters': characters,
+                    'detailed_outline': detailed_outline
+                }
+                # 启用继续按钮
+                self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
+            return
         
         # 合并所有正文部分
         # 为每个段落添加带补零的章节号
@@ -1089,7 +1404,7 @@ class StoryGeneratorApp:
     
     def _call_openai_api(self, prompt, max_tokens, update_ui=True, conversation_history=None, step=None):
         """
-        调用AI API的通用方法，支持多平台和多模型
+        调用AI API的通用方法，支持多平台和多模型，包含网络错误重试机制
         
         Args:
             prompt (str): 提示词
@@ -1099,109 +1414,261 @@ class StoryGeneratorApp:
             step (int): 当前步骤，用于选择对应的平台和模型
         
         Returns:
-            str: API返回的内容
+            str: API返回的内容，如果是网络错误且重试失败则返回特殊标记
         """
-        try:
-            # 如果没有指定步骤，使用当前步骤
-            if step is None:
-                step = self.current_step
-            
-            # 获取当前步骤的平台和模型配置
-            step_config = platform_model_configs.get(f"step{step}", {})
-            platform = step_config.get("platform", current_platform)
-            model = step_config.get("model", current_model)
-            
-            print(f"调用API，平台: {platform}, 模型: {model}, 提示词长度: {len(prompt)}, max_tokens: {max_tokens}")
-            
-            # 构造消息列表
-            if conversation_history:
-                messages = conversation_history.copy()
-                messages.append({'role': 'user', 'content': prompt})
-            else:
-                messages = [{'role': 'user', 'content': prompt}]
-            
-            # 确保客户端已初始化
-            if platform not in clients:
-                # 尝试使用默认的API密钥初始化
-                if platform == "siliconflow":
-                    # 假设config中有siliconflow_api_key
-                    api_key = config.get("siliconflow_api_key", config["api_key"])
-                    clients[platform] = init_client(platform, api_key)
-                elif platform == "deepseek":
-                    # Deepseek平台只需要API密钥
-                    api_key = config.get("deepseek_api_key", config["api_key"])
-                    clients[platform] = init_client(platform, api_key)
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                # 如果没有指定步骤，使用当前步骤
+                if step is None:
+                    step = self.current_step
+                
+                # 获取当前步骤的平台和模型配置
+                step_config = platform_model_configs.get(f"step{step}", {})
+                platform = step_config.get("platform", current_platform)
+                model = step_config.get("model", current_model)
+                
+                print(f"调用API，平台: {platform}, 模型: {model}, 提示词长度: {len(prompt)}, max_tokens: {max_tokens}")
+                
+                # 构造消息列表
+                if conversation_history:
+                    messages = conversation_history.copy()
+                    messages.append({'role': 'user', 'content': prompt})
                 else:
-                    # 其他平台可能需要base_url
-                    api_key = config["api_key"]
-                    base_url = config.get("base_url", "")
-                    clients[platform] = init_client(platform, api_key, base_url)
-            
-            # 获取实际的模型ID
-            actual_model_id = get_actual_model_id(model)
-            
-            # 调用对应的API
-            response = clients[platform].chat.completions.create(
-                model=actual_model_id,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=0.8,
-                top_p=0.9,
-                stream=True
-            )
-            content = ""
-            chunk_count = 0
-            for chunk in response:
-                chunk_count += 1
-                if chunk.choices[0].delta.content:
-                    chunk_content = chunk.choices[0].delta.content
-                    content += chunk_content
-                    # 根据参数决定是否实时更新UI
-                    if update_ui:
-                        if hasattr(self, 'topic_text') and self.current_step == 2:
-                            self.topic_text.insert(tk.END, chunk_content)
-                            self.topic_text.see(tk.END)
-                        elif hasattr(self, 'characters_text') and self.current_step == 3:
-                            self.characters_text.insert(tk.END, chunk_content)
-                            self.characters_text.see(tk.END)
-                        elif hasattr(self, 'outline_text') and self.current_step == 4:
-                            self.outline_text.insert(tk.END, chunk_content)
-                            self.outline_text.see(tk.END)
-                        elif hasattr(self, 'detailed_outline_text') and self.current_step == 5:
-                            self.detailed_outline_text.insert(tk.END, chunk_content)
-                            self.detailed_outline_text.see(tk.END)
-                        elif hasattr(self, 'content_text') and self.current_step == 6:
-                            self.content_text.insert(tk.END, chunk_content)
-                            self.content_text.see(tk.END)
-                        elif hasattr(self, 'title_text') and hasattr(self, 'intro_text') and self.current_step == 7:
-                            # 标题和导语的处理
-                            pass  # 在具体方法中处理
-                        self.root.update_idletasks()
-            print(f"API调用完成，接收chunk数: {chunk_count}, 内容长度: {len(content)}")
-            
-            # 检查内容是否可能被截断
-            if chunk_count > 0 and len(content) >= max_tokens * 3:  # 粗略估计，每个token约3个字符
-                warning_msg = f"生成的内容可能已达到长度限制，max_tokens: {max_tokens}。请考虑增加max_tokens参数以获取完整内容。"
-                print(warning_msg)
-                messagebox.showwarning("内容长度警告", warning_msg)
-            
-            if not content:
-                error_msg = f"API请求失败: 未获取到内容"
+                    messages = [{'role': 'user', 'content': prompt}]
+                
+                # 确保客户端已初始化
+                if platform not in clients:
+                    # 尝试使用默认的API密钥初始化
+                    if platform == "siliconflow":
+                        # 假设config中有siliconflow_api_key
+                        api_key = config.get("siliconflow_api_key", config["api_key"])
+                        clients[platform] = init_client(platform, api_key)
+                    elif platform == "deepseek":
+                        # Deepseek平台只需要API密钥
+                        api_key = config.get("deepseek_api_key", config["api_key"])
+                        clients[platform] = init_client(platform, api_key)
+                    else:
+                        # 其他平台可能需要base_url
+                        api_key = config["api_key"]
+                        base_url = config.get("base_url", "")
+                        clients[platform] = init_client(platform, api_key, base_url)
+                
+                # 获取实际的模型ID
+                actual_model_id = get_actual_model_id(model)
+                
+                # 调用对应的API
+                response = clients[platform].chat.completions.create(
+                    model=actual_model_id,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=0.8,
+                    top_p=0.9,
+                    stream=True
+                )
+                content = ""
+                chunk_count = 0
+                for chunk in response:
+                    chunk_count += 1
+                    if chunk.choices[0].delta.content:
+                        chunk_content = chunk.choices[0].delta.content
+                        content += chunk_content
+                        # 根据参数决定是否实时更新UI
+                        if update_ui:
+                            if hasattr(self, 'topic_text') and self.current_step == 2:
+                                self.topic_text.insert(tk.END, chunk_content)
+                                self.topic_text.see(tk.END)
+                            elif hasattr(self, 'characters_text') and self.current_step == 3:
+                                self.characters_text.insert(tk.END, chunk_content)
+                                self.characters_text.see(tk.END)
+                            elif hasattr(self, 'outline_text') and self.current_step == 4:
+                                self.outline_text.insert(tk.END, chunk_content)
+                                self.outline_text.see(tk.END)
+                            elif hasattr(self, 'detailed_outline_text') and self.current_step == 5:
+                                self.detailed_outline_text.insert(tk.END, chunk_content)
+                                self.detailed_outline_text.see(tk.END)
+                            elif hasattr(self, 'content_text') and self.current_step == 6:
+                                self.content_text.insert(tk.END, chunk_content)
+                                self.content_text.see(tk.END)
+                            elif hasattr(self, 'title_text') and hasattr(self, 'intro_text') and self.current_step == 7:
+                                # 标题和导语的处理
+                                pass  # 在具体方法中处理
+                            self.root.update_idletasks()
+                print(f"API调用完成，接收chunk数: {chunk_count}, 内容长度: {len(content)}")
+                
+                # 检查内容是否可能被截断
+                if chunk_count > 0 and len(content) >= max_tokens * 3:  # 粗略估计，每个token约3个字符
+                    warning_msg = f"生成的内容可能已达到长度限制，max_tokens: {max_tokens}。请考虑增加max_tokens参数以获取完整内容。"
+                    print(warning_msg)
+                    messagebox.showwarning("内容长度警告", warning_msg)
+                
+                if not content:
+                    error_msg = f"API请求失败: 未获取到内容"
+                    print(error_msg)
+                    messagebox.showwarning("API错误", error_msg)
+                    return "API调用失败，使用默认格式"
+                return content
+            except Exception as e:
+                error_msg = f"API调用异常: {e}"
                 print(error_msg)
-                messagebox.showwarning("API错误", error_msg)
-                return "API调用失败，使用默认格式"
-            return content
-        except Exception as e:
-            error_msg = f"API调用异常: {e}"
-            print(error_msg)
-            messagebox.showerror("API异常", error_msg)
-            return f"API调用异常，使用默认格式"
+                
+                # 判断错误类型并设置不同的处理方式
+                error_str = str(e).lower()
+                # 限流错误 (429) - 直接标记为中断，让用户手动控制继续
+                if "429" in error_str or "rate limit" in error_str or "tpm limit" in error_str:
+                    # 标记为中断
+                    self.is_interrupted = True
+                    # 在主线程中显示对话框
+                    self.root.after(0, lambda: messagebox.showerror("API限流", "API限流错误(429)：TPM限制已达到。\n请等待一段时间后点击'中断后继续'按钮。"))
+                    return "<GENERATION_INTERRUPTED>"
+                # 网络错误
+                elif "timeout" in error_str or "network" in error_str or "connection" in error_str:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        retry_msg = f"网络错误，正在进行第{retry_count}次重试..."
+                        print(retry_msg)
+                        # 在主线程中显示对话框
+                        self.root.after(0, lambda msg=retry_msg: messagebox.showinfo("网络错误重试", msg))
+                        # 等待3秒后重试
+                        time.sleep(TIME_SLEEP)
+                        continue
+                    else:
+                        # 重试次数用完，标记为中断
+                        self.is_interrupted = True
+                        # 在主线程中显示对话框
+                        self.root.after(0, lambda: messagebox.showerror("网络错误", "网络错误，已尝试3次重试，生成中断。请检查网络连接后点击'中断后继续'按钮。"))
+                        return "<GENERATION_INTERRUPTED>"
+                
+                # 其他类型的错误不重试
+                # 在主线程中显示对话框
+                self.root.after(0, lambda msg=error_msg: messagebox.showerror("API异常", msg))
+                return f"API调用异常，使用默认格式"
         
     def regenerate_content(self, user_provided_outline=None):
         # 清空原有内容
         self.content_text.delete(1.0, tk.END)
         # 重新生成正文
         self.generate_content(user_provided_outline)
+        
+    def continue_content(self):
+        """
+        从中断处继续生成正文
+        """
+        # 检查是否有中断状态
+        if 'content' not in self.current_generation_state:
+            messagebox.showinfo("提示", "没有检测到中断的正文生成任务。")
+            return
+        
+        # 获取中断状态
+        resume_state = self.current_generation_state['content']
+        
+        # 禁用按钮
+        self.save_content_button.config(state=tk.DISABLED)
+        self.regenerate_content_button.config(state=tk.DISABLED)
+        self.continue_content_button.config(state=tk.DISABLED)
+        
+        # 在新线程中继续生成
+        threading.Thread(target=lambda: self._async_continue_content(resume_state), daemon=True).start()
+        
+    def _async_continue_content(self, resume_state):
+        """
+        异步从中断处继续生成正文
+        """
+        try:
+            # 从中断状态中恢复参数
+            current_index = resume_state.get('current_index', 0)
+            content_parts = resume_state.get('content_parts', [])
+            conversation_history = resume_state.get('conversation_history', [])
+            detailed_outline_lines = resume_state.get('detailed_outline_lines', [])
+            topic = resume_state.get('topic', "")
+            characters = resume_state.get('characters', "")
+            detailed_outline = resume_state.get('detailed_outline', "")
+            
+            # 重置中断标记
+            self.is_interrupted = False
+            
+            # 继续处理未完成的部分
+            for i in range(current_index, len(detailed_outline_lines)):
+                if self.is_interrupted:
+                    break
+                    
+                # 构造提示词，包含细纲的i位置
+                selected_detailed_outline = detailed_outline_lines[i]
+                print(selected_detailed_outline+"\n")
+                # 从配置文件中获取后续提示词模板并替换变量
+                prompt_template = prompts["content_subsequent"]
+                prompt = prompt_template.format(topic=topic, characters=characters, selected_detailed_outline=selected_detailed_outline)
+                
+                # 调用API生成正文，传递当前步骤
+                content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)
+                
+                # 检查是否中断
+                if content_part == "<GENERATION_INTERRUPTED>":
+                    self.current_generation_state['content'] = {
+                        'current_index': i,
+                        'content_parts': content_parts,
+                        'conversation_history': conversation_history,
+                        'detailed_outline_lines': detailed_outline_lines,
+                        'topic': topic,
+                        'characters': characters,
+                        'detailed_outline': detailed_outline
+                    }
+                    # 重新启用继续按钮
+                    self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
+                    return
+                
+                content_parts.append(content_part.strip())
+                # 实时更新UI
+                self.root.after(0, lambda i=i, content_part=content_part: self.content_text.insert(tk.END, f"\n\n{i+1:03d}\n" + content_part))
+                self.root.after(0, lambda: self.root.update_idletasks())
+                # 更新会话历史
+                conversation_history.append({'role': 'user', 'content': prompt})
+                conversation_history.append({'role': 'assistant', 'content': content_part})
+                
+            # 如果完成了所有部分，清理中断状态
+            if i >= len(detailed_outline_lines) - 1 and not self.is_interrupted:
+                # 合并所有正文部分
+                # 为每个段落添加带补零的章节号
+                numbered_content_parts = [f"{idx+1:03d}\n{part}" for idx, part in enumerate(content_parts)]
+                content = "\n".join(numbered_content_parts)
+                
+                # 保存生成的内容
+                self.generated_content["content"] = content
+                
+                # 在UI中显示正文
+                self.root.after(0, lambda: self.content_text.delete("1.0", tk.END))
+                self.root.after(0, lambda: self.content_text.insert("1.0", content))
+                
+                # 切换到正文页面
+                self.root.after(0, lambda: self.notebook.select(self.step6_frame))
+                
+                # 清理中断状态
+                if 'content' in self.current_generation_state:
+                    del self.current_generation_state['content']
+                    # 禁用继续按钮
+                    self.root.after(0, lambda: self.continue_content_button.config(state=tk.DISABLED))
+            
+        except Exception as e:
+            print(f"继续生成正文异常: {e}")
+            # 如果是中断异常，记录当前状态
+            if self.is_interrupted:
+                self.current_generation_state['content'] = {
+                    'current_index': i if 'i' in locals() else current_index,
+                    'content_parts': content_parts,
+                    'conversation_history': conversation_history,
+                    'detailed_outline_lines': detailed_outline_lines,
+                    'topic': topic,
+                    'characters': characters,
+                    'detailed_outline': detailed_outline
+                }
+            # 重新启用继续按钮
+            self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
+        finally:
+            # 重新启用按钮
+            self.root.after(0, lambda: self.save_content_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.regenerate_content_button.config(state=tk.NORMAL))
         
     def save_content_and_continue(self):
         # 保存正文
@@ -1434,6 +1901,13 @@ class StoryGeneratorApp:
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = StoryGeneratorApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = StoryGeneratorApp(root)
+        root.mainloop()
+    except KeyboardInterrupt:
+        print("程序已被用户中断")
+        # 可以添加更多清理代码如果需要
+    except Exception as e:
+        print(f"程序异常: {e}")
+        input("按回车键退出...")

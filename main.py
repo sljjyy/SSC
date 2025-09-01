@@ -9,9 +9,58 @@ import json
 import threading
 
 TIME_SLEEP = 20
+CONTENT_SIZE_MIN = 1000
 # 读取配置文件
-with open('config.json', 'r', encoding='utf-8') as f:
-    config = json.load(f)
+def load_config():
+    config = {}
+    config_path = 'config.json'
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        print(f"已从{config_path}加载配置")
+    except FileNotFoundError:
+        # 如果配置文件不存在，创建默认配置
+        print(f"配置文件{config_path}不存在，将使用默认配置")
+        config = {
+            "api_key": "",
+            "base_url": "",
+            "siliconflow_api_key": "",
+            "deepseek_api_key": ""
+        }
+        # 尝试保存默认配置
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            print(f"已创建默认配置文件{config_path}")
+        except PermissionError:
+            print(f"无法在当前目录创建配置文件，程序将使用内存中的默认配置")
+        except Exception as e:
+            print(f"创建默认配置文件失败: {e}")
+    except PermissionError:
+        # 如果没有读取权限，尝试从用户目录读取或使用默认配置
+        print(f"没有权限读取配置文件{config_path}")
+        user_dir = os.path.expanduser('~')
+        alt_config_path = os.path.join(user_dir, 'ssc_config.json')
+        if os.path.exists(alt_config_path):
+            try:
+                with open(alt_config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                print(f"已从用户目录配置文件{alt_config_path}加载配置")
+            except Exception as e:
+                print(f"从用户目录读取配置失败: {e}")
+                config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": ""}
+        else:
+            print("用户目录也没有配置文件，将使用默认配置")
+            config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": ""}
+    except Exception as e:
+        print(f"读取配置文件时发生错误: {e}")
+        config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": ""}
+    
+    return config
+
+# 加载配置
+config = load_config()
 
 # 初始化OpenAI客户端
 def init_openai_client(api_key, base_url):
@@ -46,19 +95,20 @@ def init_client(platform, api_key, base_url=None):
 
 # 模型显示名称到实际ID的映射
 model_display_names = {
-    "[16]千问": "Qwen/Qwen3-235B-A22B",
+    "[10]千问": "Qwen/Qwen3-235B-A22B",
     "[4]千问长文": "Tongyi-Zhiwen/QwenLong-L1-32B",
     "[14]智普清言": "zai-org/GLM-4.5",
-    "[16]Deepseek": "deepseek-ai/DeepSeek-V3.1",
+    "[12]ProDeepseekV3.1": "Pro/deepseek-ai/DeepSeek-V3.1",
     "[8]DeepseekR1": "deepseek-ai/DeepSeek-R1",
     "[免费]DSR1+Qwen3": "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+    "[8]百度": "baidu/ERNIE-4.5-300B-A47B",
     "[4]腾讯混元": "tencent/Hunyuan-A13B-Instruct"
 }
 
 # 获取平台支持的模型（返回显示名称）
 def get_platform_models(platform):
     if platform == "siliconflow":
-        return ["[16]千问", "[4]千问长文", "[14]智普清言", "[16]Deepseek", "[8]DeepseekR1","[4]腾讯混元","[免费]DSR1+Qwen3"]
+        return ["[10]千问", "[4]千问长文", "[14]智普清言", "[12]ProDeepseekV3.1", "[8]DeepseekR1", "[8]百度","[4]腾讯混元","[免费]DSR1+Qwen3"]
     elif platform == "deepseek":
         return ["deepseek-chat", "deepseek-llm-7b-chat", "deepseek-coder"]
     else:
@@ -77,34 +127,91 @@ current_model = "千问"
 # 保存平台模型配置到文件
 def save_platform_model_configs():
     try:
-        # 读取现有的配置
+        # 首先尝试在当前目录保存
+        config_path = 'config.json'
         config_data = {}
-        if os.path.exists('config.json'):
-            with open('config.json', 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
+        
+        # 如果文件存在且可读取，则读取现有配置
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+            except Exception as read_error:
+                print(f"读取现有配置失败: {read_error}，将创建新配置")
+                config_data = {}
         
         # 添加或更新平台模型配置
         config_data['platform_model_configs'] = platform_model_configs
         
-        # 保存配置到文件
-        with open('config.json', 'w', encoding='utf-8') as f:
-            json.dump(config_data, f, ensure_ascii=False, indent=2)
-        print("平台模型配置已保存到config.json")
+        # 尝试保存配置到文件
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=2)
+            print(f"平台模型配置已保存到{config_path}")
+        except PermissionError:
+            # 如果当前目录没有写入权限，尝试保存到用户目录
+            import getpass
+            import tempfile
+            user_dir = os.path.expanduser('~')
+            alt_config_path = os.path.join(user_dir, 'ssc_config.json')
+            try:
+                with open(alt_config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, ensure_ascii=False, indent=2)
+                print(f"当前目录没有写入权限，配置已保存到用户目录: {alt_config_path}")
+            except Exception as alt_error:
+                print(f"在用户目录保存配置也失败: {alt_error}")
+        except Exception as e:
+            print(f"保存平台模型配置失败: {e}")
     except Exception as e:
-        print(f"保存平台模型配置失败: {e}")
+        print(f"保存平台模型配置过程中发生错误: {e}")
 
 # 从文件加载平台模型配置
 def load_platform_model_configs():
     global platform_model_configs
     try:
-        if os.path.exists('config.json'):
-            with open('config.json', 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-                if 'platform_model_configs' in config_data:
-                    platform_model_configs = config_data['platform_model_configs']
-                    print("已从config.json加载平台模型配置")
+        import os
+        # 首先尝试从当前目录加载配置
+        config_path = 'config.json'
+        config_loaded = False
+        
+        # 如果当前目录有配置文件，尝试加载
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                    if 'platform_model_configs' in config_data:
+                        platform_model_configs = config_data['platform_model_configs']
+                        print(f"已从{config_path}加载平台模型配置")
+                        config_loaded = True
+            except Exception as e:
+                print(f"从当前目录加载配置失败: {e}")
+        
+        # 如果当前目录没有配置文件或加载失败，尝试从用户目录加载
+        if not config_loaded:
+            user_dir = os.path.expanduser('~')
+            alt_config_path = os.path.join(user_dir, 'ssc_config.json')
+            if os.path.exists(alt_config_path):
+                try:
+                    with open(alt_config_path, 'r', encoding='utf-8') as f:
+                        config_data = json.load(f)
+                        if 'platform_model_configs' in config_data:
+                            platform_model_configs = config_data['platform_model_configs']
+                            print(f"已从用户目录配置文件{alt_config_path}加载平台模型配置")
+                            config_loaded = True
+                except Exception as e:
+                    print(f"从用户目录加载配置失败: {e}")
+        
+        # 如果两个位置都没有配置文件，使用默认配置
+        if not config_loaded:
+            print("未找到配置文件，将使用默认配置")
+            # 设置默认配置
+            for step in range(1, 8):
+                platform_model_configs[f"step{step}"] = {
+                    "platform": current_platform,
+                    "model": current_model
+                }
     except Exception as e:
-        print(f"加载平台模型配置失败: {e}")
+        print(f"加载平台模型配置过程中发生错误: {e}")
 
 # 加载保存的平台模型配置
 load_platform_model_configs()
@@ -119,12 +226,13 @@ else:
     api_key = config["api_key"]
 clients[current_platform] = init_client(current_platform, api_key)
 
-# 存储各环节的平台和模型选择
-for step in range(1, 8):
-    platform_model_configs[f"step{step}"] = {
-        "platform": current_platform,
-        "model": current_model
-    }
+# 只在配置为空时初始化默认值（确保已经加载的配置不会被覆盖）
+if not platform_model_configs:
+    for step in range(1, 8):
+        platform_model_configs[f"step{step}"] = {
+            "platform": current_platform,
+            "model": current_model
+        }
 
 # 读取提示词配置文件
 def load_prompts():
@@ -708,40 +816,22 @@ class StoryGeneratorApp:
         # 获取之前步骤的内容
         topic = self.generated_content.get("topic", "未生成选题")
         
-        # 构造一个连续上下文的提示词，同时生成主角、反派和配角
-        characters_prompt_template = """你是短故事专家,擅长投稿到{platform},协助进行人物设定
-        
-**只返回 人物基本信息、背景、性格、语言特征、价值观念、行为动作、语言风格、人物弧光**
-
-> 用户输入故事选题
-```
-{topic}
-```
----接下来，我们正在为一个快节奏，好看的网文短故事设计人物。这个故事需要以下三个人物：
-
-1. 主角：
-   有一个身份，这个身份交代了ta的socioeconomicstatus，基本信息，以及ta过去的和现在的处境。
-   有一定的性格，ta的性格是与处境相关的，但是却是异于常人，有故事性的。
-   这样的性格决定了ta的思维模式，又带来了异于常人的行为模式，带来了异于常人的事件与经历。
-   以上的条件也给ta带来了特征鲜明的语言特征。人物要立体，有光明的一面也有黑暗的一面。所有的一切都要出人意料，要非常极端，但是细想又能够明白其中的逻辑
-   有极致价值观念、极致行为动作、极致语言风格
-   **姓名三个字以上，以减少重复的可能性**
-
-2. 反派：
-   请先想想这样的人和世界会发生什么样的关系，有什么样的激烈的冲突，100字。要精彩，要有网文风格
-   然后安排给主角一个在现阶段几乎无法招架，造成极大压力的强大反派，让人一看就恨得牙痒痒。写出反派人物小传
-   **姓名三个字**
-
-3. 异性配角：
-   请先想想这样的人和世界会发生什么样的关系，两个人会产生什么样的化学反应，100字。要精彩，要有网文风格
-   写出异性配角人物小传
-   **姓名三个字**
-
-请在一个连续的上下文中生成这三个人物设定，确保他们之间有内在的联系和化学反应。"""
-        
-        # 格式化提示词
+        # 动态拼接人物设定提示词，不硬编码
         platform = self.user_inputs.get("platform", "短故事平台")
-        characters_prompt = characters_prompt_template.format(topic=topic, platform=platform)
+        
+        # 先构建基础提示词
+        base_prompt = f"你是短故事专家,擅长投稿到{platform},协助进行人物设定\n\n"
+        
+        # 从prompts字典获取各个角色的提示词
+        protagonist_prompt = prompts.get("protagonist", "").format(topic=topic)
+        antagonist_prompt = prompts.get("antagonist", "")
+        supporting_prompt = prompts.get("supporting", "")
+        
+        # 构建连续上下文的提示词
+        characters_prompt = base_prompt + protagonist_prompt + "\n\n" + antagonist_prompt + "\n\n" + supporting_prompt
+        
+        # 确保生成的人物设定有内在联系
+        characters_prompt += "\n\n请在一个连续的上下文中生成这三个人物设定，确保他们之间有内在的联系和化学反应。"
         
         # 调用OpenAI API生成人物设定
         characters_content = self._call_openai_api(characters_prompt, 8192)
@@ -1283,17 +1373,45 @@ class StoryGeneratorApp:
                     self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
                     return
                 
-                content_parts.append(content_part.strip())
+                # 检查内容字数是否达标（首次生成要求1000字）
+                if len(content_part.strip()) < CONTENT_SIZE_MIN and "API调用" not in content_part:
+                    print(f"首次生成内容字数不足({len(content_part.strip())}字)，尝试补充...")
+                    # 生成补充内容的提示词
+                    supplement_prompt = f"""以下是你刚生成的内容，但字数不足{CONTENT_SIZE_MIN}字，请在保持原有风格和情节的基础上，补充更多细节和描写，使总字数达到要求。\n\n{content_part}"""
+                    # 调用API补充内容
+                    supplement_content = self._call_openai_api(supplement_prompt, 4000, False, conversation_history, step=6)
+                    if "API调用" not in supplement_content:
+                        content_part += supplement_content
+                
+                # 检查是否是API调用失败的特殊标记
+                display_content = content_part  # 默认显示API返回的内容
+                if "API调用失败" in content_part or "API调用异常" in content_part:
+                    # 创建一个默认内容，确保章节不会缺失
+                    default_content = f"（注：当前章节内容生成失败，请检查API配置后重试。细纲内容：{selected_detailed_outline[:50]}...）"
+                    content_parts.append(default_content)
+                    display_content = default_content  # 显示默认内容
+                    print(f"API调用失败，使用默认内容替代: {default_content}")
+                else:
+                    content_parts.append(content_part.strip())
+                
                 # 实时更新UI
-                self.content_text.insert(tk.END, f"\n\n{1:03d}\n" + content_part)
+                self.content_text.insert(tk.END, f"\n\n{1:03d}\n" + display_content)
                 self.root.update_idletasks()
                 # 更新会话历史
                 conversation_history.append({'role': 'user', 'content': prompt})
                 conversation_history.append({'role': 'assistant', 'content': content_part})
                                
-                # 添加10秒延迟以减少请求频率，避免触发TPM限制
-                print("等待%d秒以避免请求限制...",TIME_SLEEP)
-                time.sleep(TIME_SLEEP)
+                # 获取当前步骤的平台配置
+                step = 6  # 正文生成是第6步
+                step_config = platform_model_configs.get(f"step{step}", {})
+                platform = step_config.get("platform", current_platform)
+                
+                # 根据平台决定是否添加延迟，Deepseek平台API间隔限制较小，可以不停顿
+                if platform != "deepseek":
+                    print(f"等待{TIME_SLEEP}秒以避免请求限制...")
+                    time.sleep(TIME_SLEEP)
+                else:
+                    print("使用Deepseek平台，无需额外延迟")
                 
                 # 更新当前进度
                 start_index = 1
@@ -1308,7 +1426,7 @@ class StoryGeneratorApp:
                 print(selected_detailed_outline+"\n")
                 # 从配置文件中获取后续提示词模板并替换变量
                 prompt_template = prompts["content_subsequent"]
-                prompt = prompt_template.format(topic=topic, characters=characters, selected_detailed_outline=selected_detailed_outline)
+                prompt = prompt_template.format(topic=topic, characters=characters, min_size=CONTENT_SIZE_MIN,selected_detailed_outline=selected_detailed_outline)
                 
                 # 调用API生成正文，传递当前步骤
                 content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)
@@ -1328,17 +1446,40 @@ class StoryGeneratorApp:
                     self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
                     return
                 
-                content_parts.append(content_part.strip())
+                # 检查内容字数是否达标（后续生成要求800字）
+                if len(content_part.strip()) < CONTENT_SIZE_MIN and "API调用" not in content_part:
+                    print(f"后续生成内容字数不足({len(content_part.strip())}字)，尝试补充...")
+                    # 生成补充内容的提示词
+                    supplement_prompt = f"""以下是你刚生成的内容，但字数不足{CONTENT_SIZE_MIN}字，请在保持原有风格和情节的基础上，补充更多细节和描写，使总字数达到要求。\n\n{content_part}"""
+                    # 调用API补充内容
+                    supplement_content = self._call_openai_api(supplement_prompt, 4000, False, conversation_history, step=6)
+                    if "API调用" not in supplement_content:
+                        content_part += supplement_content
+                
+                # 检查是否是API调用失败的特殊标记
+                display_content = content_part  # 默认显示API返回的内容
+                if "API调用失败" in content_part or "API调用异常" in content_part:
+                    # 创建一个默认内容，确保章节不会缺失
+                    default_content = f"（注：当前章节内容生成失败，请检查API配置后重试。细纲内容：{selected_detailed_outline[:50]}...）"
+                    content_parts.append(default_content)
+                    display_content = default_content  # 显示默认内容
+                    print(f"API调用失败，使用默认内容替代: {default_content}")
+                else:
+                    content_parts.append(content_part.strip())
+                
                 # 实时更新UI
-                self.content_text.insert(tk.END, f"\n\n{i+1:03d}\n" + content_part)
+                self.content_text.insert(tk.END, f"\n\n{i+1:03d}\n" + display_content)
                 self.root.update_idletasks()
                 # 更新会话历史
                 conversation_history.append({'role': 'user', 'content': prompt})
                 conversation_history.append({'role': 'assistant', 'content': content_part})
                 
-                # 添加10秒延迟以减少请求频率，避免触发TPM限制
-                print("等待%d秒以避免请求限制...",TIME_SLEEP)
-                time.sleep(TIME_SLEEP)
+                # 根据平台决定是否添加延迟，Deepseek平台API间隔限制较小，可以不停顿
+                if platform != "deepseek":
+                    print(f"等待{TIME_SLEEP}秒以避免请求限制...")
+                    time.sleep(TIME_SLEEP)
+                else:
+                    print("使用Deepseek平台，无需额外延迟")
         except Exception as e:
             print(f"正文生成异常: {e}")
             # 如果是中断异常，记录当前状态
@@ -1531,8 +1672,17 @@ class StoryGeneratorApp:
                         print(retry_msg)
                         # 在主线程中显示对话框
                         self.root.after(0, lambda msg=retry_msg: messagebox.showinfo("网络错误重试", msg))
+                        # 确保platform变量已定义
+                        if 'platform' not in locals():
+                            step_config = platform_model_configs.get(f"step{step}", {})
+                            platform = step_config.get("platform", current_platform)
+                        
                         # 等待3秒后重试
-                        time.sleep(TIME_SLEEP)
+                        if platform != "deepseek":
+                            time.sleep(TIME_SLEEP)
+                        else:
+                            # Deepseek平台重试间隔可以更小
+                            time.sleep(2)
                         continue
                     else:
                         # 重试次数用完，标记为中断
@@ -1696,12 +1846,12 @@ class StoryGeneratorApp:
         # 获取之前步骤的内容
         topic = self.generated_content.get("topic", "未生成选题")
         characters = self.generated_content.get("characters", "未生成人物设定")
-        content = self.generated_content.get("content", "未生成正文")
+        detailed_outline = self.generated_content.get("detailed_outline", "未生成细纲")
         
         # 生成标题
         title_prompt_template = prompts["title"]
-        # 不再限制正文内容长度
-        title_prompt = title_prompt_template.format(topic=topic, characters=characters, content=content)
+        # 使用细纲代替正文生成标题
+        title_prompt = title_prompt_template.format(topic=topic, characters=characters, content=detailed_outline)
         
         # 调用API生成标题，传递当前步骤
         title = self._call_openai_api(title_prompt, 8192, step=7)
@@ -1709,7 +1859,8 @@ class StoryGeneratorApp:
         
         # 生成导语
         intro_prompt_template = prompts["intro"]
-        intro_prompt = intro_prompt_template.format(topic=topic, characters=characters, content=content)
+        # 使用细纲代替正文生成导语
+        intro_prompt = intro_prompt_template.format(topic=topic, characters=characters, content=detailed_outline)
         
         # 调用API生成导语，传递当前步骤
         intro = self._call_openai_api(intro_prompt, 8192, step=7)
@@ -1799,6 +1950,7 @@ class StoryGeneratorApp:
                     "story_type": story_type,
                     "dilemma_type": dilemma_type,
                     "platform": platform,
+                    "emotion_type": self.user_inputs.get("emotion_type", "默认情绪类型"),
                     "inspiration": inspiration
                 }
         

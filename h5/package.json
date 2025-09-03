@@ -1,0 +1,13 @@
+{
+  "name": "xiaoshuo-story-generator",
+  "version": "1.0.0",
+  "description": "小说故事生成器H5应用",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["story", "generator", "xiaoshuo"],
+  "author": "",
+  "license": "MIT"
+}

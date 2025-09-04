@@ -235,7 +235,7 @@ if not platform_model_configs:
         }
 
 # 读取提示词配置文件
-def load_prompts():
+def load_prompts(story_type=None):
     prompts = {}
     prompt_files = [
         "topic.prompt",
@@ -244,6 +244,7 @@ def load_prompts():
         "detailed_outline_subsequent.prompt",
         "content_first.prompt",
         "content_subsequent.prompt",
+        "content_last.prompt",  # 添加最后的提示词文件
         "title.prompt",
         "intro.prompt",
         "protagonist.prompt",
@@ -251,14 +252,37 @@ def load_prompts():
         "supporting.prompt"
     ]
     
+    # 确定提示词目录
+    prompt_dir = "prompts"
+    if story_type and os.path.exists(f"prompts/{story_type}"):
+        prompt_dir = f"prompts/{story_type}"
+        print(f"使用{story_type}类型的提示词，目录: {prompt_dir}")
+    else:
+        print(f"使用默认提示词，目录: {prompt_dir}")
+    
     for file in prompt_files:
-        with open(f'prompts/{file}', 'r', encoding='utf-8') as f:
-            # 使用文件名（不含扩展名）作为键
-            key = file.split('.')[0]
-            prompts[key] = f.read()
+        file_path = os.path.join(prompt_dir, file)
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                # 使用文件名（不含扩展名）作为键
+                key = file.split('.')[0]
+                prompts[key] = f.read()
+        except FileNotFoundError:
+            # 如果特定类型的提示词文件不存在，尝试使用默认目录下的文件
+            default_file_path = os.path.join("prompts", file)
+            if os.path.exists(default_file_path):
+                with open(default_file_path, 'r', encoding='utf-8') as f:
+                    key = file.split('.')[0]
+                    prompts[key] = f.read()
+                print(f"{story_type}类型缺少{file}，使用默认提示词")
+            else:
+                # 如果默认文件也不存在，设置空字符串
+                prompts[key] = ""
+                print(f"警告：无法找到提示词文件 {file}")
     
     return prompts
 
+# 初始加载默认提示词
 prompts = load_prompts()
 
 
@@ -739,7 +763,23 @@ class StoryGeneratorApp:
         # 重新启用开始生成按钮
         self.start_generate_button.config(state=tk.NORMAL)
         
+    def reload_prompts_by_story_type(self, story_type):
+        """
+        根据故事类型重新加载提示词
+        
+        Args:
+            story_type: 故事类型
+        """
+        global prompts
+        # 重新加载提示词
+        prompts = load_prompts(story_type)
+        print(f"已根据故事类型 '{story_type}' 重新加载提示词")
+        
     def generate_topic(self):
+        # 获取用户选择的故事类型
+        story_type = self.story_type_var.get()
+        # 根据故事类型重新加载提示词
+        self.reload_prompts_by_story_type(story_type)
         # 在新线程中执行生成任务
         threading.Thread(target=self._async_generate_topic, daemon=True).start()
         
@@ -1424,8 +1464,14 @@ class StoryGeneratorApp:
                 # 构造提示词，包含细纲的i位置
                 selected_detailed_outline = detailed_outline_lines[i]
                 print(selected_detailed_outline+"\n")
-                # 从配置文件中获取后续提示词模板并替换变量
-                prompt_template = prompts["content_subsequent"]
+                # 判断是否为最后一次循环，决定使用哪个提示词模板
+                if i == len(detailed_outline_lines) - 1 and prompts.get("content_last"):
+                    # 最后一次循环，使用content_last.prompt
+                    prompt_template = prompts["content_last"]
+                    print("使用content_last.prompt生成最后一部分内容")
+                else:
+                    # 不是最后一次循环，使用content_subsequent.prompt
+                    prompt_template = prompts["content_subsequent"]
                 prompt = prompt_template.format(topic=topic, characters=characters, min_size=CONTENT_SIZE_MIN,selected_detailed_outline=selected_detailed_outline)
                 
                 # 调用API生成正文，传递当前步骤
@@ -1777,8 +1823,14 @@ class StoryGeneratorApp:
                 # 构造提示词，包含细纲的i位置
                 selected_detailed_outline = detailed_outline_lines[i]
                 print(selected_detailed_outline+"\n")
-                # 从配置文件中获取后续提示词模板并替换变量
-                prompt_template = prompts["content_subsequent"]
+                # 判断是否为最后一次循环，决定使用哪个提示词模板
+                if i == len(detailed_outline_lines) - 1 and prompts.get("content_last"):
+                    # 最后一次循环，使用content_last.prompt
+                    prompt_template = prompts["content_last"]
+                    print("使用content_last.prompt生成最后一部分内容")
+                else:
+                    # 不是最后一次循环，使用content_subsequent.prompt
+                    prompt_template = prompts["content_subsequent"]
                 prompt = prompt_template.format(topic=topic, characters=characters, selected_detailed_outline=selected_detailed_outline)
                 
                 # 调用API生成正文，传递当前步骤

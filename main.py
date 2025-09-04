@@ -1690,6 +1690,36 @@ class StoryGeneratorApp:
                         # 在主线程中显示对话框
                         self.root.after(0, lambda: messagebox.showerror("网络错误", "网络错误，已尝试3次重试，生成中断。请检查网络连接后点击'中断后继续'按钮。"))
                         return "<GENERATION_INTERRUPTED>"
+                # 硅基流动特定错误处理
+                elif platform == "siliconflow":
+                    # 检查是否是硅基流动平台的特定错误码
+                    if "50508" in error_str or "system is too busy" in error_str:
+                        # 标记为中断
+                        self.is_interrupted = True
+                        # 在主线程中显示对话框，提供更友好的错误提示和建议
+                        self.root.after(0, lambda: messagebox.showerror(
+                            "硅基流动服务繁忙", 
+                            "硅基流动服务当前过于繁忙（错误码：50508）\n\n建议：\n1. 等待几分钟后点击'中断后继续'按钮重试\n2. 切换到其他平台（如DeepSeek或OpenAI）\n3. 尝试使用其他模型（如[16]千问替代[10]千问）"
+                        ))
+                        return "<GENERATION_INTERRUPTED>"
+                    elif "50500" in error_str or "unknown error" in error_str:
+                        # 标记为中断
+                        self.is_interrupted = True
+                        # 在主线程中显示对话框，提供更友好的错误提示和建议
+                        self.root.after(0, lambda: messagebox.showerror(
+                            "硅基流动未知错误", 
+                            "硅基流动服务处理请求时出现未知错误（错误码：50500）\n\n建议：\n1. 等待几分钟后点击'中断后继续'按钮重试\n2. 切换到其他平台（如DeepSeek或OpenAI）\n3. 检查API密钥是否正确配置"
+                        ))
+                        return "<GENERATION_INTERRUPTED>"
+                    elif "401" in error_str or "unauthorized" in error_str:
+                        # 标记为中断
+                        self.is_interrupted = True
+                        # 在主线程中显示对话框
+                        self.root.after(0, lambda: messagebox.showerror(
+                            "API密钥错误", 
+                            "硅基流动API密钥无效或已过期（错误码：401）\n\n建议：\n1. 检查并重新配置硅基流动API密钥\n2. 切换到其他平台（如DeepSeek或OpenAI）"
+                        ))
+                        return "<GENERATION_INTERRUPTED>"
                 
                 # 其他类型的错误不重试
                 # 在主线程中显示对话框

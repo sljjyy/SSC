@@ -1,1 +1,3 @@
 openai
+pyinstaller
+pywin32

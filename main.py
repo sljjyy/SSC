@@ -289,7 +289,7 @@ prompts = load_prompts()
 class StoryGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("文学创作辅助工具")
+        self.root.title("文学创作辅助V3.0")
         self.root.geometry("1000x700")
         
         # 创建存储目录
@@ -318,7 +318,7 @@ class StoryGeneratorApp:
         
     def create_widgets(self):
         # 标题
-        title_label = tk.Label(self.root, text="文学创作辅助工具", font=('Arial', 16, 'bold'))
+        title_label = tk.Label(self.root, text="文学创作辅助工具V3.0", font=('Arial', 16, 'bold'))
         title_label.pack(pady=10)
         
         # 创建 Notebook 控件用于分步显示
@@ -467,7 +467,7 @@ class StoryGeneratorApp:
         
         self.story_type_var = tk.StringVar()
         story_type_combo = ttk.Combobox(story_type_frame, textvariable=self.story_type_var, 
-                                       values=["世情", "穿越", "悬疑", "修仙","科幻", "奇幻", "都市", "历史", "军事", "游戏", "体育"])
+                                       values=["世情", "穿越", "言情","悬疑", "修仙","科幻", "奇幻", "都市", "历史", "军事", "游戏", "体育"])
         story_type_combo.pack(side="left", padx=(10, 0))
         story_type_combo.set("世情")
         

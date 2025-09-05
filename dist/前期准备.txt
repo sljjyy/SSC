@@ -1,0 +1,97 @@
+文学创作辅助工具使用说明
+========================
+
+感谢您使用文学创作辅助工具！
+
+运行说明：
+---------
+1. 请确保您的计算机上安装了最新版本的Microsoft Visual C++ Redistributable。
+2. 双击"文学创作辅助工具.exe"文件即可运行程序。
+
+首次运行配置：
+-------------
+1. 程序需要一个config.json文件来配置API密钥和其他设置。
+2. 如果您是首次运行，请按照以下步骤操作：
+   a. 在exe文件所在目录创建一个名为config.json的文件
+   b. 将以下内容复制到config.json文件中：
+      {
+        "siliconflow_api_key": "your-siliconflow-api-key",
+        "deepseek_api_key": "your-Deepseek-api-key",
+        "model": "deepseek-chat",
+        "base_url": "https://api.deepseek.com/v1",
+        "platform_model_configs": {
+          "step1": {
+            "platform": "siliconflow",
+            "model": "[16]千问"
+          },
+          "step2": {
+            "platform": "siliconflow",
+            "model": "[4]腾讯混元"
+          },
+          "step3": {
+            "platform": "siliconflow",
+            "model": "[16]千问"
+          },
+          "step4": {
+            "platform": "siliconflow",
+            "model": "[16]千问"
+          },
+          "step5": {
+            "platform": "siliconflow",
+            "model": "[4]千问长文"
+          },
+          "step6": {
+            "platform": "siliconflow",
+            "model": "[4]千问长文"
+          },
+          "step7": {
+            "platform": "siliconflow",
+            "model": "[16]千问"
+          }
+        }
+      }
+   c. 根据您使用的API平台，替换相应的API密钥
+
+API平台配置说明：
+--------------
+程序支持两个主要的API平台：硅基流动平台和DeepSeek平台。
+
+**硅基流动平台（推荐）：**
+- 支持千问、腾讯混元等多种模型
+- 默认配置中，大部分创作步骤使用的是硅基流动平台
+- 如使用硅基流动平台，请填写"siliconflow_api_key"字段
+
+**DeepSeek平台：**
+- 支持Deepseek模型
+- 如使用DeepSeek平台，请填写"deepseek_api_key"字段
+
+获取硅基流动API密钥：
+----------------
+1. 访问 https://cloud.siliconflow.cn/
+2. 登录或注册账户
+3. 点击顶部导航栏的"API密钥"
+4. 点击"创建API密钥"
+5. 输入密钥名称，然后点击"确认创建"
+6. 复制生成的API密钥
+7. 将复制的API密钥粘贴到config.json文件的"siliconflow_api_key"字段中
+
+获取DeepSeek API密钥：
+----------------
+1. 访问 https://platform.deepseek.com/
+2. 登录或注册账户
+3. 点击左侧菜单的"模型"
+4. 选择"Deepseek"模型
+5. 点击"创建API密钥"
+6. 输入密钥名称，然后点击"复制"以获取API密钥
+7. 将复制的API密钥粘贴到config.json文件的"deepseek_api_key"字段中
+
+注意事项：
+--------
+1. 配置文件中的platform_model_configs部分定义了每个创作步骤使用的平台和模型
+2. 您可以根据需要修改这些配置，选择不同的平台和模型组合
+3. 如果只使用其中一个平台，可以只填写对应平台的API密钥
+4. 为了获得最佳体验，建议使用硅基流动平台并填写对应的API密钥
+
+技术支持：
+---------
+如果您在使用过程中遇到任何问题，请联系技术支持。

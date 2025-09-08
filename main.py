@@ -9,7 +9,7 @@ import json
 import threading
 
 TIME_SLEEP = 20
-CONTENT_SIZE_MIN = 1000
+CONTENT_SIZE_MIN = 750
 # 读取配置文件
 def load_config():
     config = {}
@@ -26,7 +26,8 @@ def load_config():
             "api_key": "",
             "base_url": "",
             "siliconflow_api_key": "",
-            "deepseek_api_key": ""
+            "deepseek_api_key": "",
+            "content_size_min": 1000  # 默认字数限制
         }
         # 尝试保存默认配置
         try:
@@ -49,18 +50,21 @@ def load_config():
                 print(f"已从用户目录配置文件{alt_config_path}加载配置")
             except Exception as e:
                 print(f"从用户目录读取配置失败: {e}")
-                config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": ""}
+                config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": "", "content_size_min": 750}
         else:
             print("用户目录也没有配置文件，将使用默认配置")
-            config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": ""}
+            config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": "", "content_size_min": 750}
     except Exception as e:
         print(f"读取配置文件时发生错误: {e}")
-        config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": ""}
+        config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": "", "content_size_min": 750}
     
     return config
 
 # 加载配置
 config = load_config()
+
+# 初始化字数限制（从配置文件中获取或使用默认值）
+CONTENT_SIZE_MIN = config.get("content_size_min", 750)
 
 # 初始化OpenAI客户端
 def init_openai_client(api_key, base_url):
@@ -682,6 +686,26 @@ class StoryGeneratorApp:
     def create_step6_widgets(self):
         # 添加平台和模型选择控件
         self.create_platform_model_selector(self.step6_frame, 6)
+        
+        # 字数限制设置区域
+        size_limit_frame = tk.Frame(self.step6_frame)
+        size_limit_frame.pack(pady=5, padx=20, fill="x")
+        
+        size_limit_label = tk.Label(size_limit_frame, text="字数限制:")
+        size_limit_label.pack(side="left")
+        
+        # 创建字数限制输入框，默认显示当前值
+        self.content_size_min_var = tk.StringVar(value=str(CONTENT_SIZE_MIN))
+        self.content_size_min_entry = tk.Entry(size_limit_frame, textvariable=self.content_size_min_var, width=10)
+        self.content_size_min_entry.pack(side="left", padx=(5, 5))
+        
+        # 保存字数限制按钮
+        self.save_size_limit_button = tk.Button(size_limit_frame, text="保存", command=self.save_content_size_min)
+        self.save_size_limit_button.pack(side="left")
+        
+        # 字数限制说明
+        size_limit_info = tk.Label(size_limit_frame, text="（生成内容的最小字数要求）")
+        size_limit_info.pack(side="left", padx=(5, 0))
         
         # 正文编辑区域
         content_frame = tk.Frame(self.step6_frame)
@@ -1446,15 +1470,7 @@ class StoryGeneratorApp:
                     self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
                     return
                 
-                # 检查内容字数是否达标（首次生成要求1000字）
-                if len(content_part.strip()) < CONTENT_SIZE_MIN and "API调用" not in content_part:
-                    print(f"首次生成内容字数不足({len(content_part.strip())}字)，尝试补充...")
-                    # 生成补充内容的提示词
-                    supplement_prompt = f"""以下是你刚生成的内容，但字数不足{CONTENT_SIZE_MIN}字，请在保持原有风格和情节的基础上，补充更多细节和描写，使总字数达到要求。\n\n{content_part}"""
-                    # 调用API补充内容
-                    supplement_content = self._call_openai_api(supplement_prompt, 4000, False, conversation_history, step=6)
-                    if "API调用" not in supplement_content:
-                        content_part += supplement_content
+                # 不再检查内容字数，直接使用生成的内容
                 
                 # 检查是否是API调用失败的特殊标记
                 display_content = content_part  # 默认显示API返回的内容
@@ -1525,15 +1541,7 @@ class StoryGeneratorApp:
                     self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
                     return
                 
-                # 检查内容字数是否达标（后续生成要求800字）
-                if len(content_part.strip()) < CONTENT_SIZE_MIN and "API调用" not in content_part:
-                    print(f"后续生成内容字数不足({len(content_part.strip())}字)，尝试补充...")
-                    # 生成补充内容的提示词
-                    supplement_prompt = f"""以下是你刚生成的内容，但字数不足{CONTENT_SIZE_MIN}字，请在保持原有风格和情节的基础上，补充更多细节和描写，使总字数达到要求。\n\n{content_part}"""
-                    # 调用API补充内容
-                    supplement_content = self._call_openai_api(supplement_prompt, 4000, False, conversation_history, step=6)
-                    if "API调用" not in supplement_content:
-                        content_part += supplement_content
+                # 不再检查内容字数，直接使用生成的内容
                 
                 # 检查是否是API调用失败的特殊标记
                 display_content = content_part  # 默认显示API返回的内容
@@ -1957,6 +1965,31 @@ class StoryGeneratorApp:
         self.current_step = 7
         self.generate_title_and_intro()
         
+    def save_content_size_min(self):
+        """保存字数限制设置"""
+        try:
+            new_size_min = int(self.content_size_min_var.get())
+            if new_size_min < 100:
+                messagebox.showwarning("警告", "字数限制不能小于100字")
+                return
+            
+            # 更新全局变量
+            global CONTENT_SIZE_MIN
+            CONTENT_SIZE_MIN = new_size_min
+            
+            # 保存到配置文件
+            config["content_size_min"] = new_size_min
+            try:
+                config_path = 'config.json'
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config, f, ensure_ascii=False, indent=2)
+                messagebox.showinfo("成功", f"字数限制已设置为{new_size_min}字")
+            except Exception as e:
+                print(f"保存配置文件失败: {e}")
+                messagebox.showwarning("警告", "字数限制已更新但保存配置失败")
+        except ValueError:
+            messagebox.showwarning("警告", "请输入有效的数字")
+        
     def generate_title_and_intro(self):
         # 在新线程中执行生成任务
         threading.Thread(target=self._async_generate_title_and_intro, daemon=True).start()
@@ -2119,6 +2152,34 @@ class StoryGeneratorApp:
         
         # 更新UI
         self.update_ui_with_loaded_content()
+        
+    def load_previous_story(self, event):
+        """加载之前的故事记录"""
+        selected_story = self.previous_story_var.get()
+        if selected_story:
+            # 设置当前故事目录
+            self.story_dir = os.path.join(self.stories_base_dir, selected_story)
+            
+            # 尝试加载用户输入和生成内容
+            try:
+                # 加载用户输入
+                input_path = os.path.join(self.story_dir, "user_inputs.json")
+                if os.path.exists(input_path):
+                    with open(input_path, 'r', encoding='utf-8') as f:
+                        self.user_inputs = json.load(f)
+                
+                # 加载生成内容
+                content_path = os.path.join(self.story_dir, "generated_content.json")
+                if os.path.exists(content_path):
+                    with open(content_path, 'r', encoding='utf-8') as f:
+                        self.generated_content = json.load(f)
+                
+                # 更新UI
+                self.update_ui_with_loaded_content()
+                
+            except Exception as e:
+                print(f"加载故事记录失败: {e}")
+                messagebox.showerror("加载失败", f"无法加载故事记录：{str(e)}")
         
     def update_ui_with_loaded_content(self):
         """使用加载的内容更新UI"""

@@ -121,8 +121,8 @@ def get_actual_model_id(display_name):
 # 全局客户端和模型配置
 clients = {}
 platform_model_configs = {}
-current_platform = "siliconflow"
-current_model = "千问"
+current_platform = "deepseek"
+current_model = "deepseek-chat"
 
 # 保存平台模型配置到文件
 def save_platform_model_configs():
@@ -316,6 +316,26 @@ class StoryGeneratorApp:
         # 创建界面
         self.create_widgets()
         
+    def add_context_menu(self, text_widget):
+        """为文本输入框添加右键菜单（复制、粘贴）和确保撤销功能正常"""
+        # 创建右键菜单
+        context_menu = tk.Menu(text_widget, tearoff=0)
+        context_menu.add_command(label="复制", command=lambda: text_widget.event_generate('<<Copy>>'))
+        context_menu.add_command(label="粘贴", command=lambda: text_widget.event_generate('<<Paste>>'))
+        context_menu.add_command(label="剪切", command=lambda: text_widget.event_generate('<<Cut>>'))
+        context_menu.add_separator()
+        context_menu.add_command(label="全选", command=lambda: text_widget.tag_add('sel', '1.0', 'end'))
+        
+        # 绑定右键菜单到文本框
+        def show_menu(event):
+            context_menu.post(event.x_root, event.y_root)
+        
+        text_widget.bind("<Button-3>", show_menu)
+        
+        # 确保撤销功能正常（Tkinter默认支持Ctrl+Z）
+        # 如果需要额外配置撤销堆栈大小，可以取消下面的注释
+        # text_widget.config(undo=True)
+        
     def create_widgets(self):
         # 标题
         title_label = tk.Label(self.root, text="文学创作辅助工具V3.0", font=('Arial', 16, 'bold'))
@@ -437,8 +457,8 @@ class StoryGeneratorApp:
         return api_frame
         
     def create_step1_widgets(self):
-        # 添加平台和模型选择控件
-        self.create_platform_model_selector(self.step1_frame, 1)
+        # 移除AI平台和模型选择控件
+        # self.create_platform_model_selector(self.step1_frame, 1)
         
         # 获取已有的故事目录
         story_dirs = []
@@ -469,7 +489,7 @@ class StoryGeneratorApp:
         story_type_combo = ttk.Combobox(story_type_frame, textvariable=self.story_type_var, 
                                        values=["世情", "穿越", "言情","悬疑", "修仙","科幻", "奇幻", "都市", "历史", "军事", "游戏", "体育"])
         story_type_combo.pack(side="left", padx=(10, 0))
-        story_type_combo.set("世情")
+        story_type_combo.set("悬疑")
         
         # 困境类型
         dilemma_type_frame = tk.Frame(self.step1_frame)
@@ -482,7 +502,7 @@ class StoryGeneratorApp:
         dilemma_type_combo = ttk.Combobox(dilemma_type_frame, textvariable=self.dilemma_type_var,
                                          values=["爱而不得", "生死危机", "恨之入骨", "一无所有 "])
         dilemma_type_combo.pack(side="left", padx=(10, 0))
-        dilemma_type_combo.set("爱而不得")
+        dilemma_type_combo.set("一无所有")
         
         # 投稿平台
         platform_frame = tk.Frame(self.step1_frame)
@@ -525,6 +545,8 @@ class StoryGeneratorApp:
         
         self.inspiration_text = scrolledtext.ScrolledText(inspiration_frame, height=10)
         self.inspiration_text.pack(fill="both", expand=True, pady=(5, 0))
+        # 添加右键菜单和确保撤销功能
+        self.add_context_menu(self.inspiration_text)
         
         # 按钮框架
         button_frame = tk.Frame(self.step1_frame)
@@ -549,6 +571,8 @@ class StoryGeneratorApp:
         
         self.topic_text = scrolledtext.ScrolledText(topic_frame, height=15)
         self.topic_text.pack(fill="both", expand=True, pady=(5, 0))
+        # 添加右键菜单和确保撤销功能
+        self.add_context_menu(self.topic_text)
         
         # 按钮框架
         button_frame = tk.Frame(self.step2_frame)
@@ -576,6 +600,8 @@ class StoryGeneratorApp:
         
         self.characters_text = scrolledtext.ScrolledText(characters_frame, height=15)
         self.characters_text.pack(fill="both", expand=True, pady=(5, 0))
+        # 添加右键菜单和确保撤销功能
+        self.add_context_menu(self.characters_text)
         
         # 按钮框架
         button_frame = tk.Frame(self.step3_frame)
@@ -603,6 +629,8 @@ class StoryGeneratorApp:
         
         self.outline_text = scrolledtext.ScrolledText(outline_frame, height=15)
         self.outline_text.pack(fill="both", expand=True, pady=(5, 0))
+        # 添加右键菜单和确保撤销功能
+        self.add_context_menu(self.outline_text)
         
         # 按钮框架
         button_frame = tk.Frame(self.step4_frame)
@@ -630,6 +658,8 @@ class StoryGeneratorApp:
         
         self.detailed_outline_text = scrolledtext.ScrolledText(detailed_outline_frame, height=15)
         self.detailed_outline_text.pack(fill="both", expand=True, pady=(5, 0))
+        # 添加右键菜单和确保撤销功能
+        self.add_context_menu(self.detailed_outline_text)
         
         # 按钮框架
         button_frame = tk.Frame(self.step5_frame)
@@ -662,6 +692,8 @@ class StoryGeneratorApp:
         
         self.content_text = scrolledtext.ScrolledText(content_frame, height=15)
         self.content_text.pack(fill="both", expand=True, pady=(5, 0))
+        # 添加右键菜单和确保撤销功能
+        self.add_context_menu(self.content_text)
         
         # 按钮框架
         button_frame = tk.Frame(self.step6_frame)
@@ -682,9 +714,6 @@ class StoryGeneratorApp:
         self.save_content_button.pack(side="left", padx=10)
         
     def create_step7_widgets(self):
-        # 添加平台和模型选择控件
-        self.create_platform_model_selector(self.step7_frame, 7)
-        
         # 标题和导语编辑区域
         title_intro_frame = tk.Frame(self.step7_frame)
         title_intro_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -694,12 +723,16 @@ class StoryGeneratorApp:
         
         self.title_text = scrolledtext.ScrolledText(title_intro_frame, height=3)
         self.title_text.pack(fill="both", expand=True, pady=(5, 0))
+        # 添加右键菜单和确保撤销功能
+        self.add_context_menu(self.title_text)
         
         intro_label = tk.Label(title_intro_frame, text="导语:")
         intro_label.pack(anchor="w", pady=(10, 0))
 
         self.intro_text = scrolledtext.ScrolledText(title_intro_frame, height=5)
         self.intro_text.pack(fill="both", expand=True, pady=(5, 0))
+        # 添加右键菜单和确保撤销功能
+        self.add_context_menu(self.intro_text)
         
         # 按钮框架
         button_frame = tk.Frame(self.step7_frame)
@@ -1661,6 +1694,15 @@ class StoryGeneratorApp:
                     chunk_count += 1
                     if chunk.choices[0].delta.content:
                         chunk_content = chunk.choices[0].delta.content
+                        # 去除正文部分每行末尾的两个空格
+                        if self.current_step == 6 and '\n' in chunk_content:
+                            # 处理chunk中的每行，移除行尾的两个空格
+                            lines = chunk_content.split('\n')
+                            for i in range(len(lines)):
+                                if lines[i].endswith('  ') and len(lines[i]) > 2:
+                                    lines[i] = lines[i][:-2]
+                            chunk_content = '\n'.join(lines)
+                        
                         content += chunk_content
                         # 根据参数决定是否实时更新UI
                         if update_ui:

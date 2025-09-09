@@ -2,15 +2,15 @@
 
 
 a = Analysis(
-    ['J:\\AI\\xiaoshuo\\SSC\\SSC\\main.py'],
+    ['d:\\xiaoshuo\\SSC\\SSC\\main.py'],
     pathex=[],
     binaries=[],
-    datas=[('J:\\AI\\xiaoshuo\\SSC\\SSC\\prompts', 'prompts')],
-    hiddenimports=['tkinter', 'openai', 'win32api', 'win32con', 'win32gui'],
+    datas=[],
+    hiddenimports=['tkinter', 'openai'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['win32api', 'win32con', 'win32gui', 'win32com', 'win32clipboard'],
     noarchive=False,
     optimize=0,
 )

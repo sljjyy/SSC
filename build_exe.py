@@ -35,12 +35,14 @@ def build_exe():
         '--onefile',
         '--windowed',
         '--name', 'StoryGenerator',
-        '--add-data', f'{os.path.join(current_dir, "prompts")};prompts',
         '--hidden-import', 'tkinter',
         '--hidden-import', 'openai',
-        '--hidden-import', 'win32api',
-        '--hidden-import', 'win32con',
-        '--hidden-import', 'win32gui',
+        # 移除不必要的win32相关模块导入，减小打包体积
+        '--exclude-module', 'win32api',
+        '--exclude-module', 'win32con',
+        '--exclude-module', 'win32gui',
+        '--exclude-module', 'win32com',
+        '--exclude-module', 'win32clipboard',
         '--clean',
         os.path.join(current_dir, 'main.py')
     ]
@@ -63,6 +65,9 @@ def build_exe():
             
             # 复制README文件
             copy_readme_files()
+            
+            # 复制prompts文件夹
+            copy_prompts_folder()
             
             print("\n打包完成！\n\n" \
                   "请执行以下步骤: \
@@ -138,6 +143,25 @@ def copy_readme_files():
             
     except Exception as e:
         print(f"复制README文件失败: {e}")
+
+
+def copy_prompts_folder():
+    """复制prompts文件夹到dist目录，便于用户修改提示词"""
+    try:
+        # 定义源目录和目标目录
+        prompts_src = os.path.join(current_dir, 'prompts')
+        prompts_dest = os.path.join(current_dir, 'dist', 'prompts')
+        
+        # 如果目标目录已存在，先删除
+        if os.path.exists(prompts_dest):
+            shutil.rmtree(prompts_dest)
+        
+        # 复制整个prompts文件夹
+        shutil.copytree(prompts_src, prompts_dest)
+        print(f"已复制prompts文件夹到: {prompts_dest}")
+        
+    except Exception as e:
+        print(f"复制prompts文件夹失败: {e}")
 
 if __name__ == "__main__":
     build_exe()

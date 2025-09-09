@@ -293,7 +293,7 @@ prompts = load_prompts()
 class StoryGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("文学创作辅助V3.0")
+        self.root.title("文学创作辅助V3.1")
         self.root.geometry("1000x700")
         
         # 创建存储目录
@@ -342,7 +342,7 @@ class StoryGeneratorApp:
         
     def create_widgets(self):
         # 标题
-        title_label = tk.Label(self.root, text="文学创作辅助工具V3.0", font=('Arial', 16, 'bold'))
+        title_label = tk.Label(self.root, text="文学创作辅助工具V3.1", font=('Arial', 16, 'bold'))
         title_label.pack(pady=10)
         
         # 创建 Notebook 控件用于分步显示

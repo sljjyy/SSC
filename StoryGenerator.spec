@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['d:\\xiaoshuo\\SSC\\SSC\\main.py'],
+    ['j:\\AI\\xiaoshuo\\SSC\\SSC\\main.py'],
     pathex=[],
     binaries=[],
     datas=[],

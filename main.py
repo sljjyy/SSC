@@ -293,7 +293,7 @@ prompts = load_prompts()
 class StoryGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("文学创作辅助V3.1")
+        self.root.title("文学创作辅助V3.2")
         self.root.geometry("1000x700")
         
         # 创建存储目录
@@ -342,7 +342,7 @@ class StoryGeneratorApp:
         
     def create_widgets(self):
         # 标题
-        title_label = tk.Label(self.root, text="文学创作辅助工具V3.1", font=('Arial', 16, 'bold'))
+        title_label = tk.Label(self.root, text="文学创作辅助工具V3.2", font=('Arial', 16, 'bold'))
         title_label.pack(pady=10)
         
         # 创建 Notebook 控件用于分步显示
@@ -467,7 +467,7 @@ class StoryGeneratorApp:
         # 获取已有的故事目录
         story_dirs = []
         if os.path.exists(self.stories_base_dir):
-            story_dirs = [d for d in os.listdir(self.stories_base_dir) if os.path.isdir(os.path.join(self.stories_base_dir, d)) and d.startswith('story_')]
+            story_dirs = [d for d in os.listdir(self.stories_base_dir) if os.path.isdir(os.path.join(self.stories_base_dir, d))]
         
         # 选择之前记录
         previous_story_frame = tk.Frame(self.step1_frame)
@@ -588,6 +588,11 @@ class StoryGeneratorApp:
         self.regenerate_topic_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_topic, bg="#2196F3", fg="white", padx=20)
         self.regenerate_topic_button.pack(side="left", padx=10)
         
+        # 保存按钮
+        self.save_only_topic_button = tk.Button(button_frame, text="保存", command=self.save_topic, bg="#2196F3", fg="white", padx=20)
+        self.save_only_topic_button.pack(side="left", padx=10)
+        
+        # 保存并继续按钮
         self.save_topic_button = tk.Button(button_frame, text="保存并继续", command=self.save_topic_and_continue, bg="#4CAF50", fg="white", padx=20)
         self.save_topic_button.pack(side="left", padx=10)
         
@@ -617,6 +622,11 @@ class StoryGeneratorApp:
         self.regenerate_characters_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_characters, bg="#2196F3", fg="white", padx=20)
         self.regenerate_characters_button.pack(side="left", padx=10)
         
+        # 保存按钮
+        self.save_only_characters_button = tk.Button(button_frame, text="保存", command=self.save_characters, bg="#2196F3", fg="white", padx=20)
+        self.save_only_characters_button.pack(side="left", padx=10)
+        
+        # 保存并继续按钮
         self.save_characters_button = tk.Button(button_frame, text="保存并继续", command=self.save_characters_and_continue, bg="#4CAF50", fg="white", padx=20)
         self.save_characters_button.pack(side="left", padx=10)
         
@@ -646,6 +656,11 @@ class StoryGeneratorApp:
         self.regenerate_outline_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_outline, bg="#2196F3", fg="white", padx=20)
         self.regenerate_outline_button.pack(side="left", padx=10)
         
+        # 保存按钮
+        self.save_only_outline_button = tk.Button(button_frame, text="保存", command=self.save_outline, bg="#2196F3", fg="white", padx=20)
+        self.save_only_outline_button.pack(side="left", padx=10)
+        
+        # 保存并继续按钮
         self.save_outline_button = tk.Button(button_frame, text="保存并继续", command=self.save_outline_and_continue, bg="#4CAF50", fg="white", padx=20)
         self.save_outline_button.pack(side="left", padx=10)
         
@@ -680,6 +695,11 @@ class StoryGeneratorApp:
         # 默认禁用继续按钮，只有在中断时才启用
         self.continue_detailed_outline_button.config(state=tk.DISABLED)
         
+        # 保存按钮
+        self.save_only_detailed_outline_button = tk.Button(button_frame, text="保存", command=self.save_detailed_outline, bg="#2196F3", fg="white", padx=20)
+        self.save_only_detailed_outline_button.pack(side="left", padx=10)
+        
+        # 保存并继续按钮
         self.save_detailed_outline_button = tk.Button(button_frame, text="保存并继续", command=self.save_detailed_outline_and_continue, bg="#4CAF50", fg="white", padx=20)
         self.save_detailed_outline_button.pack(side="left", padx=10)
         
@@ -734,10 +754,18 @@ class StoryGeneratorApp:
         # 默认禁用继续按钮，只有在中断时才启用
         self.continue_content_button.config(state=tk.DISABLED)
         
+        # 保存按钮
+        self.save_only_content_button = tk.Button(button_frame, text="保存", command=self.save_content, bg="#2196F3", fg="white", padx=20)
+        self.save_only_content_button.pack(side="left", padx=10)
+        
+        # 保存并继续按钮
         self.save_content_button = tk.Button(button_frame, text="保存并继续", command=self.save_content_and_continue, bg="#4CAF50", fg="white", padx=20)
         self.save_content_button.pack(side="left", padx=10)
         
     def create_step7_widgets(self):
+        # 添加平台和模型选择控件
+        self.create_platform_model_selector(self.step7_frame, 7)
+        
         # 标题和导语编辑区域
         title_intro_frame = tk.Frame(self.step7_frame)
         title_intro_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -768,6 +796,11 @@ class StoryGeneratorApp:
         self.regenerate_title_and_intro_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_title_and_intro, bg="#2196F3", fg="white", padx=20)
         self.regenerate_title_and_intro_button.pack(side="left", padx=10)
         
+        # 保存按钮
+        self.save_only_title_and_intro_button = tk.Button(button_frame, text="保存", command=self.save_title_and_intro, bg="#2196F3", fg="white", padx=20)
+        self.save_only_title_and_intro_button.pack(side="left", padx=10)
+        
+        # 保存并完成按钮
         self.save_title_and_intro_and_finish_button = tk.Button(button_frame, text="保存并完成", command=self.save_title_and_intro_and_finish, bg="#4CAF50", fg="white", padx=20)
         self.save_title_and_intro_and_finish_button.pack(side="left", padx=10)
         
@@ -812,6 +845,13 @@ class StoryGeneratorApp:
             story_dir_name = f"story_{timestamp}"
             self.story_dir = os.path.join(self.stories_base_dir, story_dir_name)
             os.makedirs(self.story_dir, exist_ok=True)
+        
+        # 立即保存用户输入到JSON文件，防止程序崩溃导致数据丢失
+        try:
+            with open(os.path.join(self.story_dir, "user_inputs.json"), "w", encoding="utf-8") as f:
+                json.dump(self.user_inputs, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存用户输入JSON文件失败: {e}")
         
         # 开始创作流程
         self.current_step = 2
@@ -862,6 +902,8 @@ class StoryGeneratorApp:
         
         # 保存生成的内容
         self.generated_content["topic"] = topic
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 切换到选题页面
         self.notebook.select(self.step2_frame)
@@ -875,6 +917,31 @@ class StoryGeneratorApp:
         self.topic_text.delete(1.0, tk.END)
         # 重新生成选题
         self.generate_topic()
+        
+    def save_topic(self):
+        # 仅保存选题，不继续到下一步
+        topic = self.topic_text.get("1.0", tk.END).strip()
+        self.generated_content["topic"] = topic
+        
+        # 保存选题到文件
+        story_type = self.user_inputs.get("story_type", "")
+        dilemma_type = self.user_inputs.get("dilemma_type", "")
+        platform = self.user_inputs.get("platform", "")
+        emotion_type = self.user_inputs.get("emotion_type", "")
+        inspiration = self.user_inputs.get("inspiration", "")
+        
+        with open(os.path.join(self.story_dir, "topic.txt"), "w", encoding="utf-8") as f:
+            f.write(f"故事类型：{story_type}\n")
+            f.write(f"困境类型：{dilemma_type}\n")
+            f.write(f"情绪类型：{emotion_type}\n")
+            f.write(f"投稿平台：{platform}\n")
+            f.write(f"灵感：{inspiration}\n")
+            f.write(f"选题：{topic}\n")
+        
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
+        
+        messagebox.showinfo("保存成功", "选题已成功保存！")
         
     def save_topic_and_continue(self):
         # 保存选题
@@ -935,6 +1002,8 @@ class StoryGeneratorApp:
         
         # 保存生成的内容
         self.generated_content["characters"] = characters_content
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 切换到人物设定页面
         self.notebook.select(self.step3_frame)
@@ -949,10 +1018,26 @@ class StoryGeneratorApp:
         # 重新生成人物设定
         self.generate_characters()
         
+    def save_characters(self):
+        # 仅保存人物设定，不继续到下一步
+        characters = self.characters_text.get("1.0", tk.END).strip()
+        self.generated_content["characters"] = characters
+        
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
+        
+        # 保存人物设定到文件
+        with open(os.path.join(self.story_dir, "characters.txt"), "w", encoding="utf-8") as f:
+            f.write(characters)
+        
+        messagebox.showinfo("保存成功", "人物设定已成功保存！")
+        
     def save_characters_and_continue(self):
         # 保存人物设定
         characters = self.characters_text.get("1.0", tk.END).strip()
         self.generated_content["characters"] = characters
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 保存人物设定到文件
         with open(os.path.join(self.story_dir, "characters.txt"), "w", encoding="utf-8") as f:
@@ -985,6 +1070,8 @@ class StoryGeneratorApp:
         
         # 保存生成的内容
         self.generated_content["outline"] = outline
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 在UI中显示粗纲
         self.outline_text.delete("1.0", tk.END)
@@ -1003,10 +1090,26 @@ class StoryGeneratorApp:
         # 重新生成粗纲
         self.generate_outline()
         
+    def save_outline(self):
+        # 仅保存粗纲，不继续到下一步
+        outline = self.outline_text.get("1.0", tk.END).strip()
+        self.generated_content["outline"] = outline
+        
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
+        
+        # 保存粗纲到文件
+        with open(os.path.join(self.story_dir, "outline.txt"), "w", encoding="utf-8") as f:
+            f.write(outline)
+        
+        messagebox.showinfo("保存成功", "粗纲已成功保存！")
+        
     def save_outline_and_continue(self):
         # 保存粗纲
         outline = self.outline_text.get("1.0", tk.END).strip()
         self.generated_content["outline"] = outline
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 保存粗纲到文件
         with open(os.path.join(self.story_dir, "outline.txt"), "w", encoding="utf-8") as f:
@@ -1204,6 +1307,8 @@ class StoryGeneratorApp:
         
         # 保存生成的内容
         self.generated_content["detailed_outline"] = detailed_outline
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 在UI中显示细纲
         self.detailed_outline_text.delete("1.0", tk.END)
@@ -1342,10 +1447,26 @@ class StoryGeneratorApp:
             self.root.after(0, lambda: self.save_detailed_outline_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.regenerate_detailed_outline_button.config(state=tk.NORMAL))
         
+    def save_detailed_outline(self):
+        # 仅保存细纲，不继续到下一步
+        detailed_outline = self.detailed_outline_text.get("1.0", tk.END).strip()
+        self.generated_content["detailed_outline"] = detailed_outline
+        
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
+        
+        # 保存细纲到文件
+        with open(os.path.join(self.story_dir, "detailed_outline.txt"), "w", encoding="utf-8") as f:
+            f.write(detailed_outline)
+        
+        messagebox.showinfo("保存成功", "细纲已成功保存！")
+        
     def save_detailed_outline_and_continue(self):
         # 保存细纲
         detailed_outline = self.detailed_outline_text.get("1.0", tk.END).strip()
         self.generated_content["detailed_outline"] = detailed_outline
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 保存细纲到文件
         with open(os.path.join(self.story_dir, "detailed_outline.txt"), "w", encoding="utf-8") as f:
@@ -1591,6 +1712,8 @@ class StoryGeneratorApp:
         
         # 保存生成的内容
         self.generated_content["content"] = content
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 在UI中显示正文
         self.content_text.delete("1.0", tk.END)
@@ -1952,10 +2075,26 @@ class StoryGeneratorApp:
             self.root.after(0, lambda: self.save_content_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.regenerate_content_button.config(state=tk.NORMAL))
         
+    def save_content(self):
+        # 仅保存正文，不继续到下一步
+        content = self.content_text.get("1.0", tk.END).strip()
+        self.generated_content["content"] = content
+        
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
+        
+        # 保存正文到文件
+        with open(os.path.join(self.story_dir, "content.txt"), "w", encoding="utf-8") as f:
+            f.write(content)
+        
+        messagebox.showinfo("保存成功", "正文已成功保存！")
+        
     def save_content_and_continue(self):
         # 保存正文
         content = self.content_text.get("1.0", tk.END).strip()
         self.generated_content["content"] = content
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 保存正文到文件
         with open(os.path.join(self.story_dir, "content.txt"), "w", encoding="utf-8") as f:
@@ -2026,6 +2165,8 @@ class StoryGeneratorApp:
         # 保存生成的内容
         self.generated_content["title"] = title
         self.generated_content["intro"] = intro
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
         
         # 在UI中显示标题和导语
         self.title_text.delete("1.0", tk.END)
@@ -2047,6 +2188,23 @@ class StoryGeneratorApp:
         # 重新生成标题和导语
         self.generate_title_and_intro()
         
+    def save_title_and_intro(self):
+        # 仅保存标题和导语，不标记完成
+        title = self.title_text.get("1.0", tk.END).strip()
+        intro = self.intro_text.get("1.0", tk.END).strip()
+        self.generated_content["title"] = title
+        self.generated_content["intro"] = intro
+        
+        # 保存标题和导语到文本文件
+        with open(os.path.join(self.story_dir, "title_intro.txt"), "w", encoding="utf-8") as f:
+            f.write(f"标题：{title}\n")
+            f.write(f"导语：{intro}\n")
+        
+        # 保存到JSON文件
+        self.save_generated_content_to_json()
+        
+        messagebox.showinfo("保存成功", "标题和导语已成功保存！")
+        
     def save_title_and_intro_and_finish(self):
         # 保存标题和导语
         title = self.title_text.get("1.0", tk.END).strip()
@@ -2054,104 +2212,38 @@ class StoryGeneratorApp:
         self.generated_content["title"] = title
         self.generated_content["intro"] = intro
         
-        # 保存标题和导语到文件
+        # 保存标题和导语到文本文件
         with open(os.path.join(self.story_dir, "title_intro.txt"), "w", encoding="utf-8") as f:
             f.write(f"标题：{title}\n")
             f.write(f"导语：{intro}\n")
         
+        # 保存用户输入到JSON文件
+        try:
+            with open(os.path.join(self.story_dir, "user_inputs.json"), "w", encoding="utf-8") as f:
+                json.dump(self.user_inputs, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存用户输入JSON文件失败: {e}")
+        
+        # 保存生成内容到JSON文件
+        try:
+            with open(os.path.join(self.story_dir, "generated_content.json"), "w", encoding="utf-8") as f:
+                json.dump(self.generated_content, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存生成内容JSON文件失败: {e}")
+        
         # 完成
         messagebox.showinfo("完成", f"故事生成完成！\n文件已保存到：{self.story_dir}")
         
-    def load_previous_story(self, event=None):
-        """加载之前的故事记录"""
-        selected_story = self.previous_story_var.get()
-        if not selected_story:
+    def save_generated_content_to_json(self):
+        """将生成内容保存到JSON文件"""
+        if not self.story_dir:
             return
-
-        # 设置当前故事目录
-        self.story_dir = os.path.join(self.stories_base_dir, selected_story)
-        
-        # 加载topic.txt
-        topic_file = os.path.join(self.story_dir, "topic.txt")
-        if os.path.exists(topic_file):
-            with open(topic_file, "r", encoding="utf-8") as f:
-                content = f.read()
-                # 解析内容
-                lines = content.split("\n")
-                story_type = ""
-                dilemma_type = ""
-                platform = ""
-                inspiration = ""
-                
-                for line in lines:
-                    if line.startswith("故事类型："):
-                        story_type = line.split("：", 1)[1]
-                        self.story_type_var.set(story_type)
-                    elif line.startswith("困境类型："):
-                        dilemma_type = line.split("：", 1)[1]
-                        self.dilemma_type_var.set(dilemma_type)
-                    elif line.startswith("投稿平台："):
-                        platform = line.split("：", 1)[1]
-                        self.platform_var.set(platform)
-                    elif line.startswith("灵感："):
-                        inspiration = line.split("：", 1)[1]
-                        self.inspiration_text.delete("1.0", tk.END)
-                        self.inspiration_text.insert("1.0", inspiration)
-                    elif line.startswith("选题："):
-                        # 保存选题内容
-                        topic_content = "\n".join(lines[lines.index(line):])
-                        self.generated_content["topic"] = topic_content
-                
-                # 更新user_inputs字典
-                self.user_inputs = {
-                    "story_type": story_type,
-                    "dilemma_type": dilemma_type,
-                    "platform": platform,
-                    "emotion_type": self.user_inputs.get("emotion_type", "默认情绪类型"),
-                    "inspiration": inspiration
-                }
-        
-        # 加载characters.txt
-        characters_file = os.path.join(self.story_dir, "characters.txt")
-        if os.path.exists(characters_file):
-            with open(characters_file, "r", encoding="utf-8") as f:
-                self.generated_content["characters"] = f.read()
-        
-        # 加载outline.txt
-        outline_file = os.path.join(self.story_dir, "outline.txt")
-        if os.path.exists(outline_file):
-            with open(outline_file, "r", encoding="utf-8") as f:
-                self.generated_content["outline"] = f.read()
-        
-        # 加载detailed_outline.txt
-        detailed_outline_file = os.path.join(self.story_dir, "detailed_outline.txt")
-        if os.path.exists(detailed_outline_file):
-            with open(detailed_outline_file, "r", encoding="utf-8") as f:
-                self.generated_content["detailed_outline"] = f.read()
-        
-        # 加载content.txt
-        content_file = os.path.join(self.story_dir, "content.txt")
-        if os.path.exists(content_file):
-            with open(content_file, "r", encoding="utf-8") as f:
-                self.generated_content["content"] = f.read()
-        
-        # 加载title_intro.txt
-        title_intro_file = os.path.join(self.story_dir, "title_intro.txt")
-        if os.path.exists(title_intro_file):
-            with open(title_intro_file, "r", encoding="utf-8") as f:
-                content = f.read()
-                # 解析标题和导语
-                lines = content.split("\n")
-                for line in lines:
-                    if line.startswith("标题："):
-                        if "title" not in self.generated_content:
-                            self.generated_content["title"] = line.split("：", 1)[1]
-                    elif line.startswith("导语："):
-                        if "intro" not in self.generated_content:
-                            self.generated_content["intro"] = line.split("：", 1)[1]
-        
-        # 更新UI
-        self.update_ui_with_loaded_content()
+            
+        try:
+            with open(os.path.join(self.story_dir, "generated_content.json"), "w", encoding="utf-8") as f:
+                json.dump(self.generated_content, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存生成内容JSON文件失败: {e}")
         
     def load_previous_story(self, event):
         """加载之前的故事记录"""
@@ -2162,17 +2254,119 @@ class StoryGeneratorApp:
             
             # 尝试加载用户输入和生成内容
             try:
-                # 加载用户输入
+                # 首先尝试从JSON文件加载（新版本格式）
                 input_path = os.path.join(self.story_dir, "user_inputs.json")
-                if os.path.exists(input_path):
+                content_path = os.path.join(self.story_dir, "generated_content.json")
+                
+                if os.path.exists(input_path) and os.path.exists(content_path):
+                    # 从JSON文件加载
                     with open(input_path, 'r', encoding='utf-8') as f:
                         self.user_inputs = json.load(f)
-                
-                # 加载生成内容
-                content_path = os.path.join(self.story_dir, "generated_content.json")
-                if os.path.exists(content_path):
                     with open(content_path, 'r', encoding='utf-8') as f:
                         self.generated_content = json.load(f)
+                    
+                    # 设置UI元素的值
+                    if "story_type" in self.user_inputs:
+                        self.story_type_var.set(self.user_inputs["story_type"])
+                    if "dilemma_type" in self.user_inputs:
+                        self.dilemma_type_var.set(self.user_inputs["dilemma_type"])
+                    if "platform" in self.user_inputs:
+                        self.platform_var.set(self.user_inputs["platform"])
+                    if "inspiration" in self.user_inputs:
+                        self.inspiration_text.delete("1.0", tk.END)
+                        self.inspiration_text.insert("1.0", self.user_inputs["inspiration"])
+                    
+                    # 处理情绪类型（多项选择）
+                    if "emotion_type" in self.user_inputs:
+                        # 将存储的逗号分隔字符串转换为列表
+                        selected_emotions = self.user_inputs["emotion_type"].split(",")
+                        # 重置所有情绪类型的选择状态
+                        for emotion, var in self.emotion_type_vars:
+                            var.set(False)
+                        # 设置选中的情绪类型
+                        for emotion, var in self.emotion_type_vars:
+                            if emotion in selected_emotions:
+                                var.set(True)
+                else:
+                    # 如果没有JSON文件，尝试从文本文件加载（旧版本格式）
+                    # 加载topic.txt
+                    topic_file = os.path.join(self.story_dir, "topic.txt")
+                    if os.path.exists(topic_file):
+                        with open(topic_file, "r", encoding="utf-8") as f:
+                            content = f.read()
+                            # 解析内容
+                            lines = content.split("\n")
+                            story_type = ""
+                            dilemma_type = ""
+                            platform = ""
+                            inspiration = ""
+                            
+                            for line in lines:
+                                if line.startswith("故事类型："):
+                                    story_type = line.split("：", 1)[1]
+                                    self.story_type_var.set(story_type)
+                                elif line.startswith("困境类型："):
+                                    dilemma_type = line.split("：", 1)[1]
+                                    self.dilemma_type_var.set(dilemma_type)
+                                elif line.startswith("投稿平台："):
+                                    platform = line.split("：", 1)[1]
+                                    self.platform_var.set(platform)
+                                elif line.startswith("灵感："):
+                                    inspiration = line.split("：", 1)[1]
+                                    self.inspiration_text.delete("1.0", tk.END)
+                                    self.inspiration_text.insert("1.0", inspiration)
+                                elif line.startswith("选题："):
+                                    # 保存选题内容
+                                    topic_content = "\n".join(lines[lines.index(line):])
+                                    self.generated_content["topic"] = topic_content
+                            
+                            # 更新user_inputs字典
+                            self.user_inputs = {
+                                "story_type": story_type,
+                                "dilemma_type": dilemma_type,
+                                "platform": platform,
+                                "emotion_type": self.user_inputs.get("emotion_type", "默认情绪类型"),
+                                "inspiration": inspiration
+                            }
+                    
+                    # 加载characters.txt
+                    characters_file = os.path.join(self.story_dir, "characters.txt")
+                    if os.path.exists(characters_file):
+                        with open(characters_file, "r", encoding="utf-8") as f:
+                            self.generated_content["characters"] = f.read()
+                    
+                    # 加载outline.txt
+                    outline_file = os.path.join(self.story_dir, "outline.txt")
+                    if os.path.exists(outline_file):
+                        with open(outline_file, "r", encoding="utf-8") as f:
+                            self.generated_content["outline"] = f.read()
+                    
+                    # 加载detailed_outline.txt
+                    detailed_outline_file = os.path.join(self.story_dir, "detailed_outline.txt")
+                    if os.path.exists(detailed_outline_file):
+                        with open(detailed_outline_file, "r", encoding="utf-8") as f:
+                            self.generated_content["detailed_outline"] = f.read()
+                    
+                    # 加载content.txt
+                    content_file = os.path.join(self.story_dir, "content.txt")
+                    if os.path.exists(content_file):
+                        with open(content_file, "r", encoding="utf-8") as f:
+                            self.generated_content["content"] = f.read()
+                    
+                    # 加载title_intro.txt
+                    title_intro_file = os.path.join(self.story_dir, "title_intro.txt")
+                    if os.path.exists(title_intro_file):
+                        with open(title_intro_file, "r", encoding="utf-8") as f:
+                            content = f.read()
+                            # 解析标题和导语
+                            lines = content.split("\n")
+                            for line in lines:
+                                if line.startswith("标题："):
+                                    if "title" not in self.generated_content:
+                                        self.generated_content["title"] = line.split("：", 1)[1]
+                                elif line.startswith("导语："):
+                                    if "intro" not in self.generated_content:
+                                        self.generated_content["intro"] = line.split("：", 1)[1]
                 
                 # 更新UI
                 self.update_ui_with_loaded_content()

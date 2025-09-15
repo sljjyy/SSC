@@ -7,9 +7,27 @@ from openai import OpenAI
 from http import HTTPStatus
 import json
 import threading
+import ctypes
 
-TIME_SLEEP = 20
+TIME_SLEEP = 50
 CONTENT_SIZE_MIN = 750
+
+# 防止Windows息屏的辅助函数
+def prevent_windows_sleep():
+    """防止Windows在生成过程中息屏"""
+    # 调用Windows API保持系统活跃
+    # ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x00000001
+    ES_CONTINUOUS = 0x80000000
+    ES_SYSTEM_REQUIRED = 0x00000001
+    ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+
+
+def allow_windows_sleep():
+    """恢复Windows的息屏设置"""
+    # 恢复默认状态
+    ES_CONTINUOUS = 0x80000000
+    ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+
 # 读取配置文件
 def load_config():
     config = {}
@@ -293,7 +311,7 @@ prompts = load_prompts()
 class StoryGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("文学创作辅助V3.2")
+        self.root.title("文学创作辅助V3.3")
         self.root.geometry("1000x700")
         
         # 创建存储目录
@@ -342,7 +360,7 @@ class StoryGeneratorApp:
         
     def create_widgets(self):
         # 标题
-        title_label = tk.Label(self.root, text="文学创作辅助工具V3.2", font=('Arial', 16, 'bold'))
+        title_label = tk.Label(self.root, text="文学创作辅助工具V3.3", font=('Arial', 16, 'bold'))
         title_label.pack(pady=10)
         
         # 创建 Notebook 控件用于分步显示
@@ -687,7 +705,7 @@ class StoryGeneratorApp:
         prev_button = tk.Button(button_frame, text="上一步", command=self.prev_step, bg="#FF9800", fg="white", padx=20)
         prev_button.pack(side="left", padx=10)
         
-        self.regenerate_detailed_outline_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_detailed_outline, bg="#2196F3", fg="white", padx=20)
+        self.regenerate_detailed_outline_button = tk.Button(button_frame, text="重新生成", command=self.save_outline_and_continue, bg="#2196F3", fg="white", padx=20)
         self.regenerate_detailed_outline_button.pack(side="left", padx=10)
         
         self.continue_detailed_outline_button = tk.Button(button_frame, text="中断后继续", command=self.continue_detailed_outline, bg="#9C27B0", fg="white", padx=20)
@@ -1186,6 +1204,44 @@ class StoryGeneratorApp:
                 # 按行分割
                 outline_lines = [line.strip() for line in outline.split('\n') if line.strip()]
         
+        # 提取粗纲转细纲方法
+        def convert_to_detailed_outline(prompt_template_name, outline_content, is_first=False):
+            # 根据模板名称获取对应的提示词模板
+            prompt_template = prompts[prompt_template_name]
+            
+            # 根据是否是第一个元素选择不同的格式化参数
+            if is_first:
+                prompt = prompt_template.format(topic=topic, characters=characters, outline=outline_content, outlineTemp=outline_content)
+            else:
+                prompt = prompt_template.format(topic=topic, characters=characters, outline_text=outline_content, outlineTime=outline_content)
+            
+            print(outline_content + "\n")
+            
+            # 调用API生成细纲，传递会话历史和当前步骤
+            detailed_outline_part = self._call_openai_api(prompt, 8192, True, conversation_history, step=5)
+            
+            # 检查是否中断
+            if detailed_outline_part == "<GENERATION_INTERRUPTED>":
+                self.current_generation_state['detailed_outline'] = {
+                    'current_index': current_index,
+                    'detailed_outline_parts': detailed_outline_parts,
+                    'conversation_history': conversation_history,
+                    'outline_lines': outline_lines,
+                    'topic': topic,
+                    'characters': characters
+                }
+                # 启用继续按钮
+                self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.NORMAL))
+                return False
+            
+            detailed_outline_parts.append(detailed_outline_part)
+            
+            # 更新会话历史
+            conversation_history.append({'role': 'user', 'content': prompt})
+            conversation_history.append({'role': 'assistant', 'content': detailed_outline_part})
+            
+            return True
+        
         # 生成细纲
         detailed_outline_parts = []
         
@@ -1197,7 +1253,7 @@ class StoryGeneratorApp:
         
         # 检查是否有中断状态需要恢复
         resume_state = self.current_generation_state.get('detailed_outline', {})
-        start_index = resume_state.get('current_index', 0)
+        current_index = resume_state.get('current_index', 0)
         if resume_state.get('detailed_outline_parts'):
             detailed_outline_parts = resume_state['detailed_outline_parts']
         if resume_state.get('conversation_history'):
@@ -1207,85 +1263,44 @@ class StoryGeneratorApp:
         self.is_interrupted = False
         
         try:
-            # 处理粗纲数组的0,-1,-2位置（单独1组） - 如果是第一次执行
-            if len(outline_lines) >= 3 and start_index == 0:
-                # 构造提示词，包含粗纲的0,-1,-2位置
-                selected_outline = [outline_lines[0], outline_lines[-2], outline_lines[-1]]
-                outline_text = "\n".join(selected_outline)
-                
-                # 从配置文件中获取第一组提示词模板并替换变量
-                prompt_template = prompts["detailed_outline_first"]
-                prompt = prompt_template.format(topic=topic, characters=characters, outline=outline_text,outlineTemp=outline_lines[0])
-                
-                # 调用API生成细纲，传递会话历史和当前步骤
-                detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
-                
-                # 检查是否中断
-                if detailed_outline_part == "<GENERATION_INTERRUPTED>":
-                    self.current_generation_state['detailed_outline'] = {
-                        'current_index': 0,
-                        'detailed_outline_parts': detailed_outline_parts,
-                        'conversation_history': conversation_history,
-                        'outline_lines': outline_lines,
-                        'topic': topic,
-                        'characters': characters
-                    }
-                    # 启用继续按钮
-                    self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.NORMAL))
+            # 处理粗纲数组的第一个元素（单独处理） - 如果是第一次执行或从0开始恢复
+            if len(outline_lines) >= 1 and current_index == 0:
+                # 提示词=detailed_outline_first.prompt加入粗纲数组[0]
+                success = convert_to_detailed_outline("detailed_outline_first", outline_lines[0], is_first=True)
+                if not success:
                     return
-                
-                detailed_outline_parts.append(detailed_outline_part)
-                
-                # 更新会话历史
-                conversation_history.append({'role': 'user', 'content': prompt})
-                conversation_history.append({'role': 'assistant', 'content': detailed_outline_part})
-                
-                # 更新当前进度
-                start_index = 1
+                current_index = 1
             
-            # 处理粗纲数组的其他位置（每次步长为2，但在处理第1、倒数第一、倒数第二项时步长为1）
-            i = start_index
-            while i < len(outline_lines) and not self.is_interrupted:
+            # 处理粗纲数组的中间部分，确保倒数第二和倒数第一个元素单独处理
+            while current_index < len(outline_lines) - 2 and not self.is_interrupted:
+                # 处理中间元素，每2个一组
+                content = outline_lines[current_index] + outline_lines[current_index + 1]
+                current_index += 2
                 
-                # 检查是否是第1、倒数第一、倒数第二项
-                if i == 1 or i == len(outline_lines) - 1 or i == len(outline_lines) - 2:
-                    # 步长为1
-                    selected_outline = [outline_lines[i]]
-                    outlineTemp = outline_lines[i]
-                    i += 1
-                else:
-                    # 步长为2
-                    selected_outline = outline_lines[i:i+2]
-                    outlineTemp = "\n".join(selected_outline)
-                    i += 2
-                
-                print(outlineTemp+"\n")
-                # 从配置文件中获取后续提示词模板并替换变量
-                prompt_template = prompts["detailed_outline_subsequent"]
-                prompt = prompt_template.format(topic=topic, characters=characters, outline_text=outlineTemp,outlineTime=outlineTemp)
-                
-                # 调用API生成细纲，传递会话历史和当前步骤
-                detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
-                
-                # 检查是否中断
-                if detailed_outline_part == "<GENERATION_INTERRUPTED>":
-                    self.current_generation_state['detailed_outline'] = {
-                        'current_index': i,
-                        'detailed_outline_parts': detailed_outline_parts,
-                        'conversation_history': conversation_history,
-                        'outline_lines': outline_lines,
-                        'topic': topic,
-                        'characters': characters
-                    }
-                    # 启用继续按钮
-                    self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.NORMAL))
+                # 粗纲转细纲
+                success = convert_to_detailed_outline("detailed_outline_subsequent", content)
+                if not success:
                     return
+            
+            # 处理倒数第二个元素（如果存在）
+            if current_index == len(outline_lines) - 2 and not self.is_interrupted:
+                content = outline_lines[current_index]
+                current_index += 1
                 
-                detailed_outline_parts.append(detailed_outline_part)
+                # 粗纲转细纲
+                success = convert_to_detailed_outline("detailed_outline_subsequent", content)
+                if not success:
+                    return
+            
+            # 处理最后一个元素
+            if current_index == len(outline_lines) - 1 and not self.is_interrupted:
+                content = outline_lines[current_index]
+                current_index += 1
                 
-                # 更新会话历史
-                conversation_history.append({'role': 'user', 'content': prompt})
-                conversation_history.append({'role': 'assistant', 'content': detailed_outline_part})
+                # 粗纲转细纲
+                success = convert_to_detailed_outline("detailed_outline_subsequent", content)
+                if not success:
+                    return
         except Exception as e:
             print(f"细纲生成异常: {e}")
             # 如果是中断异常，记录当前状态
@@ -1360,37 +1375,26 @@ class StoryGeneratorApp:
             topic = resume_state.get('topic', "")
             characters = resume_state.get('characters', "")
             
-            # 重置中断标记
-            self.is_interrupted = False
-            
-            # 继续处理未完成的部分
-            i = current_index
-            while i < len(outline_lines) and not self.is_interrupted:
+            # 提取粗纲转细纲方法
+            def convert_to_detailed_outline(prompt_template_name, outline_content, is_first=False):
+                # 根据模板名称获取对应的提示词模板
+                prompt_template = prompts[prompt_template_name]
                 
-                # 检查是否是第1、倒数第一、倒数第二项
-                if i == 1 or i == len(outline_lines) - 1 or i == len(outline_lines) - 2:
-                    # 步长为1
-                    selected_outline = [outline_lines[i]]
-                    outlineTemp = outline_lines[i]
-                    i += 1
+                # 根据是否是第一个元素选择不同的格式化参数
+                if is_first:
+                    prompt = prompt_template.format(topic=topic, characters=characters, outline=outline_content, outlineTemp=outline_content)
                 else:
-                    # 步长为2
-                    selected_outline = outline_lines[i:i+2]
-                    outlineTemp = "\n".join(selected_outline)
-                    i += 2
+                    prompt = prompt_template.format(topic=topic, characters=characters, outline_text=outline_content, outlineTime=outline_content)
                 
-                print(outlineTemp+"\n")
-                # 从配置文件中获取后续提示词模板并替换变量
-                prompt_template = prompts["detailed_outline_subsequent"]
-                prompt = prompt_template.format(topic=topic, characters=characters, outline_text=outlineTemp,outlineTime=outlineTemp)
+                print(outline_content + "\n")
                 
                 # 调用API生成细纲，传递会话历史和当前步骤
-                detailed_outline_part = self._call_openai_api(prompt, 8192, conversation_history=conversation_history, step=5)
+                detailed_outline_part = self._call_openai_api(prompt, 8192, True, conversation_history, step=5)
                 
                 # 检查是否中断
                 if detailed_outline_part == "<GENERATION_INTERRUPTED>":
                     self.current_generation_state['detailed_outline'] = {
-                        'current_index': i,
+                        'current_index': current_index,
                         'detailed_outline_parts': detailed_outline_parts,
                         'conversation_history': conversation_history,
                         'outline_lines': outline_lines,
@@ -1399,13 +1403,43 @@ class StoryGeneratorApp:
                     }
                     # 重新启用继续按钮
                     self.root.after(0, lambda: self.continue_detailed_outline_button.config(state=tk.NORMAL))
-                    return
+                    return False
                 
                 detailed_outline_parts.append(detailed_outline_part)
                 
                 # 更新会话历史
                 conversation_history.append({'role': 'user', 'content': prompt})
                 conversation_history.append({'role': 'assistant', 'content': detailed_outline_part})
+                
+                return True
+            
+            # 重置中断标记
+            self.is_interrupted = False
+            
+            # 继续处理未完成的部分
+            # 处理粗纲数组的中间部分（从current_index到-3）
+            while current_index < len(outline_lines) - 2 and not self.is_interrupted:
+                # 粗纲转细纲(粗纲数组[current_index])
+                success = convert_to_detailed_outline("detailed_outline_subsequent", outline_lines[current_index])
+                if not success:
+                    return
+                current_index += 1
+            
+            # 处理粗纲数组的倒数第二个元素
+            if current_index == len(outline_lines) - 2 and not self.is_interrupted and len(outline_lines) >= 2:
+                # 提示词=detailed_outline_subsequent.prompt加入粗纲数组[-2]
+                success = convert_to_detailed_outline("detailed_outline_subsequent", outline_lines[-2])
+                if not success:
+                    return
+                current_index += 1
+            
+            # 处理粗纲数组的最后一个元素
+            if current_index == len(outline_lines) - 1 and not self.is_interrupted and len(outline_lines) >= 1:
+                # 提示词=detailed_outline_subsequent.prompt加入粗纲数组[-1]
+                success = convert_to_detailed_outline("detailed_outline_subsequent", outline_lines[-1])
+                if not success:
+                    return
+                current_index += 1
                 
             # 如果完成了所有部分，清理中断状态
             if i >= len(outline_lines) and not self.is_interrupted:
@@ -1433,7 +1467,7 @@ class StoryGeneratorApp:
             # 如果是中断异常，记录当前状态
             if self.is_interrupted:
                 self.current_generation_state['detailed_outline'] = {
-                    'current_index': i,
+                    'current_index': current_index,
                     'detailed_outline_parts': detailed_outline_parts,
                     'conversation_history': conversation_history,
                     'outline_lines': outline_lines,
@@ -1562,7 +1596,7 @@ class StoryGeneratorApp:
         
         # 重置中断标记
         self.is_interrupted = False
-        
+        prevent_windows_sleep()
         try:
             # 处理细纲数组的第一个位置 - 如果是第一次执行
             if len(detailed_outline_lines) > 0 and start_index == 0:
@@ -1571,7 +1605,7 @@ class StoryGeneratorApp:
                 
                 # 从配置文件中获取第一组提示词模板并替换变量
                 prompt_template = prompts["content_first"]
-                prompt = prompt_template.format(characters=characters, selected_detailed_outline=selected_detailed_outline,detailed_outline=detailed_outline)
+                prompt = prompt_template.format(characters=characters, topic=topic,selected_detailed_outline=selected_detailed_outline,detailed_outline=detailed_outline)
                 
                 # 调用API生成正文，传递当前步骤
                 content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)
@@ -1704,6 +1738,8 @@ class StoryGeneratorApp:
                 # 启用继续按钮
                 self.root.after(0, lambda: self.continue_content_button.config(state=tk.NORMAL))
             return
+        finally:
+            allow_windows_sleep()
         
         # 合并所有正文部分
         # 为每个段落添加带补零的章节号
@@ -2004,7 +2040,7 @@ class StoryGeneratorApp:
                 else:
                     # 不是最后一次循环，使用content_subsequent.prompt
                     prompt_template = prompts["content_subsequent"]
-                prompt = prompt_template.format(topic=topic, characters=characters, selected_detailed_outline=selected_detailed_outline)
+                prompt = prompt_template.format(topic=topic, characters=characters, min_size=CONTENT_SIZE_MIN, selected_detailed_outline=selected_detailed_outline)
                 
                 # 调用API生成正文，传递当前步骤
                 content_part = self._call_openai_api(prompt, 8000, False, conversation_history, step=6)

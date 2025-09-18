@@ -9,7 +9,31 @@ import json
 import threading
 import ctypes
 
-TIME_SLEEP = 50
+# 保存配置到文件的函数
+def save_config(new_config):
+    try:
+        config_path = 'config.json'
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(new_config, f, ensure_ascii=False, indent=2)
+        print(f"配置已保存到{config_path}")
+        return True
+    except PermissionError:
+        # 如果当前目录没有写入权限，尝试保存到用户目录
+        user_dir = os.path.expanduser('~')
+        alt_config_path = os.path.join(user_dir, 'ssc_config.json')
+        try:
+            with open(alt_config_path, 'w', encoding='utf-8') as f:
+                json.dump(new_config, f, ensure_ascii=False, indent=2)
+            print(f"当前目录没有写入权限，配置已保存到用户目录: {alt_config_path}")
+            return True
+        except Exception as alt_error:
+            print(f"在用户目录保存配置也失败: {alt_error}")
+            return False
+    except Exception as e:
+        print(f"保存配置失败: {e}")
+        return False
+
+TIME_SLEEP = 55
 CONTENT_SIZE_MIN = 750
 
 # 防止Windows息屏的辅助函数
@@ -112,8 +136,8 @@ def init_client(platform, api_key, base_url=None):
     elif platform == "deepseek":
         return init_deepseek_client(api_key)
     else:
-        # 默认使用deepseek作为后备选项
-        return init_deepseek_client(api_key)
+        # 使用通用客户端，支持自定义base_url
+        return init_openai_client(api_key, base_url if base_url else "https://api.openai.com/v1")
 
 # 模型显示名称到实际ID的映射
 model_display_names = {
@@ -308,6 +332,138 @@ def load_prompts(story_type=None):
 prompts = load_prompts()
 
 
+class APISettingsDialog:
+    def __init__(self, parent, config_data):
+        self.parent = parent
+        self.config_data = config_data.copy()
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("API设置")
+        self.dialog.geometry("500x350")
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # 创建标签和输入框
+        self.create_widgets()
+        
+        # 居中显示
+        self.dialog.update_idletasks()
+        width = self.dialog.winfo_width()
+        height = self.dialog.winfo_height()
+        x = (self.dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.dialog.winfo_screenheight() // 2) - (height // 2)
+        self.dialog.geometry('{}x{}+{}+{}'.format(width, height, x, y))
+    
+    def create_widgets(self):
+        # 创建框架
+        frame = tk.Frame(self.dialog, padx=20, pady=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        # API Key
+        api_key_frame = tk.Frame(frame)
+        api_key_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        api_key_label = tk.Label(api_key_frame, text="通用API Key:")
+        api_key_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.api_key_var = tk.StringVar(value=self.config_data.get("api_key", ""))
+        self.api_key_entry = tk.Entry(api_key_frame, textvariable=self.api_key_var, width=40, show="*")
+        self.api_key_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Base URL
+        base_url_frame = tk.Frame(frame)
+        base_url_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        base_url_label = tk.Label(base_url_frame, text="Base URL:")
+        base_url_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.base_url_var = tk.StringVar(value=self.config_data.get("base_url", ""))
+        self.base_url_entry = tk.Entry(base_url_frame, textvariable=self.base_url_var, width=40)
+        self.base_url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # SiliconFlow API Key
+        siliconflow_frame = tk.Frame(frame)
+        siliconflow_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        siliconflow_label = tk.Label(siliconflow_frame, text="SiliconFlow API Key:")
+        siliconflow_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.siliconflow_var = tk.StringVar(value=self.config_data.get("siliconflow_api_key", ""))
+        self.siliconflow_entry = tk.Entry(siliconflow_frame, textvariable=self.siliconflow_var, width=40, show="*")
+        self.siliconflow_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # DeepSeek API Key
+        deepseek_frame = tk.Frame(frame)
+        deepseek_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        deepseek_label = tk.Label(deepseek_frame, text="DeepSeek API Key:")
+        deepseek_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.deepseek_var = tk.StringVar(value=self.config_data.get("deepseek_api_key", ""))
+        self.deepseek_entry = tk.Entry(deepseek_frame, textvariable=self.deepseek_var, width=40, show="*")
+        self.deepseek_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # 字数限制
+        content_size_frame = tk.Frame(frame)
+        content_size_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        content_size_label = tk.Label(content_size_frame, text="字数限制:")
+        content_size_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.content_size_var = tk.StringVar(value=str(self.config_data.get("content_size_min", 750)))
+        self.content_size_entry = tk.Entry(content_size_frame, textvariable=self.content_size_var, width=10)
+        self.content_size_entry.pack(side=tk.LEFT)
+        
+        # 按钮框架
+        button_frame = tk.Frame(frame)
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        # 显示/隐藏密码按钮
+        self.show_password = tk.BooleanVar(value=False)
+        self.toggle_password_btn = tk.Checkbutton(button_frame, text="显示API密钥", variable=self.show_password, command=self.toggle_password)
+        self.toggle_password_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 保存按钮
+        save_btn = tk.Button(button_frame, text="保存", command=self.save_settings, bg="#4CAF50", fg="white", padx=10)
+        save_btn.pack(side=tk.RIGHT, padx=(0, 10))
+        
+        # 取消按钮
+        cancel_btn = tk.Button(button_frame, text="取消", command=self.dialog.destroy, bg="#f44336", fg="white", padx=10)
+        cancel_btn.pack(side=tk.RIGHT)
+    
+    def toggle_password(self):
+        show = "" if self.show_password.get() else "*"
+        self.api_key_entry.config(show=show)
+        self.siliconflow_entry.config(show=show)
+        self.deepseek_entry.config(show=show)
+    
+    def save_settings(self):
+        # 更新配置数据
+        self.config_data["api_key"] = self.api_key_var.get()
+        self.config_data["base_url"] = self.base_url_var.get()
+        self.config_data["siliconflow_api_key"] = self.siliconflow_var.get()
+        self.config_data["deepseek_api_key"] = self.deepseek_var.get()
+        
+        # 验证字数限制
+        try:
+            content_size = int(self.content_size_var.get())
+            if content_size < 100:
+                messagebox.showwarning("警告", "字数限制不能小于100")
+                return
+            self.config_data["content_size_min"] = content_size
+        except ValueError:
+            messagebox.showwarning("警告", "字数限制必须是数字")
+            return
+        
+        # 保存配置
+        if save_config(self.config_data):
+            messagebox.showinfo("成功", "API设置已保存")
+            # 更新全局配置
+            global config
+            config = self.config_data
+            self.dialog.destroy()
+        else:
+            messagebox.showerror("错误", "保存API设置失败")
+
 class StoryGeneratorApp:
     def __init__(self, root):
         self.root = root
@@ -360,8 +516,15 @@ class StoryGeneratorApp:
         
     def create_widgets(self):
         # 标题
-        title_label = tk.Label(self.root, text="文学创作辅助工具V3.3", font=('Arial', 16, 'bold'))
-        title_label.pack(pady=10)
+        title_frame = tk.Frame(self.root)
+        title_frame.pack(fill=tk.X, pady=10, padx=10)
+        
+        title_label = tk.Label(title_frame, text="文学创作辅助工具V3.3", font=('Arial', 16, 'bold'))
+        title_label.pack(side=tk.LEFT)
+        
+        # 设置按钮
+        settings_btn = tk.Button(title_frame, text="设置API密钥", command=self.open_settings_dialog, bg="#2196F3", fg="white", padx=10)
+        settings_btn.pack(side=tk.RIGHT)
         
         # 创建 Notebook 控件用于分步显示
         self.notebook = ttk.Notebook(self.root)
@@ -705,7 +868,7 @@ class StoryGeneratorApp:
         prev_button = tk.Button(button_frame, text="上一步", command=self.prev_step, bg="#FF9800", fg="white", padx=20)
         prev_button.pack(side="left", padx=10)
         
-        self.regenerate_detailed_outline_button = tk.Button(button_frame, text="重新生成", command=self.save_outline_and_continue, bg="#2196F3", fg="white", padx=20)
+        self.regenerate_detailed_outline_button = tk.Button(button_frame, text="重新生成", command=self._save_outline_and_continue_impl, bg="#2196F3", fg="white", padx=20)
         self.regenerate_detailed_outline_button.pack(side="left", padx=10)
         
         self.continue_detailed_outline_button = tk.Button(button_frame, text="中断后继续", command=self.continue_detailed_outline, bg="#9C27B0", fg="white", padx=20)
@@ -961,7 +1124,33 @@ class StoryGeneratorApp:
         
         messagebox.showinfo("保存成功", "选题已成功保存！")
         
+    def _start_countdown(self, button, target_function, countdown_seconds=15):
+        # 保存原始按钮文本和状态
+        original_text = button.cget("text")
+        original_state = button.cget("state")
+        
+        # 禁用按钮
+        button.config(state=tk.DISABLED)
+        
+        def countdown(count):
+            if count > 0:
+                # 更新按钮文本显示倒计时
+                button.config(text=f"{original_text}({count}s)")
+                # 1秒后再次调用倒计时函数
+                self.root.after(1000, countdown, count-1)
+            else:
+                # 倒计时结束，恢复按钮状态并调用目标函数
+                button.config(text=original_text, state=original_state)
+                target_function()
+        
+        # 开始倒计时
+        countdown(countdown_seconds)
+    
     def save_topic_and_continue(self):
+        # 使用倒计时功能
+        self._start_countdown(self.save_topic_button, self._save_topic_and_continue_impl)
+    
+    def _save_topic_and_continue_impl(self):
         # 保存选题
         topic = self.topic_text.get("1.0", tk.END).strip()
         self.generated_content["topic"] = topic
@@ -1051,6 +1240,10 @@ class StoryGeneratorApp:
         messagebox.showinfo("保存成功", "人物设定已成功保存！")
         
     def save_characters_and_continue(self):
+        # 使用倒计时功能
+        self._start_countdown(self.save_characters_button, self._save_characters_and_continue_impl)
+    
+    def _save_characters_and_continue_impl(self):
         # 保存人物设定
         characters = self.characters_text.get("1.0", tk.END).strip()
         self.generated_content["characters"] = characters
@@ -1123,6 +1316,10 @@ class StoryGeneratorApp:
         messagebox.showinfo("保存成功", "粗纲已成功保存！")
         
     def save_outline_and_continue(self):
+        # 使用倒计时功能
+        self._start_countdown(self.save_outline_button, self._save_outline_and_continue_impl)
+    
+    def _save_outline_and_continue_impl(self):
         # 保存粗纲
         outline = self.outline_text.get("1.0", tk.END).strip()
         self.generated_content["outline"] = outline
@@ -1496,6 +1693,10 @@ class StoryGeneratorApp:
         messagebox.showinfo("保存成功", "细纲已成功保存！")
         
     def save_detailed_outline_and_continue(self):
+        # 使用倒计时功能
+        self._start_countdown(self.save_detailed_outline_button, self._save_detailed_outline_and_continue_impl)
+    
+    def _save_detailed_outline_and_continue_impl(self):
         # 保存细纲
         detailed_outline = self.detailed_outline_text.get("1.0", tk.END).strip()
         self.generated_content["detailed_outline"] = detailed_outline
@@ -2126,6 +2327,10 @@ class StoryGeneratorApp:
         messagebox.showinfo("保存成功", "正文已成功保存！")
         
     def save_content_and_continue(self):
+        # 使用倒计时功能
+        self._start_countdown(self.save_content_button, self._save_content_and_continue_impl)
+    
+    def _save_content_and_continue_impl(self):
         # 保存正文
         content = self.content_text.get("1.0", tk.END).strip()
         self.generated_content["content"] = content
@@ -2465,6 +2670,11 @@ class StoryGeneratorApp:
                 self.notebook.select(self.step6_frame)
             elif self.current_step == 7:
                 self.notebook.select(self.step7_frame)
+    
+    def open_settings_dialog(self):
+        # 打开API设置对话框
+        global config
+        APISettingsDialog(self.root, config)
 
 
 if __name__ == "__main__":

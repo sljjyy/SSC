@@ -143,6 +143,7 @@ def init_client(platform, api_key, base_url=None):
 model_display_names = {
     "[10]千问": "Qwen/Qwen3-235B-A22B",
     "[4]千问长文": "Tongyi-Zhiwen/QwenLong-L1-32B",
+    "[4]华为盘古": "ascend-tribe/pangu-pro-moe",
     "[14]智普清言": "zai-org/GLM-4.5",
     "[12]ProDeepseekV3.1": "Pro/deepseek-ai/DeepSeek-V3.1",
     "[8]DeepseekR1": "deepseek-ai/DeepSeek-R1",
@@ -154,7 +155,7 @@ model_display_names = {
 # 获取平台支持的模型（返回显示名称）
 def get_platform_models(platform):
     if platform == "siliconflow":
-        return ["[10]千问", "[4]千问长文", "[14]智普清言", "[12]ProDeepseekV3.1", "[8]DeepseekR1", "[8]百度","[4]腾讯混元","[免费]DSR1+Qwen3"]
+        return ["[10]千问", "[4]千问长文", "[4]华为盘古","[14]智普清言", "[12]ProDeepseekV3.1", "[8]DeepseekR1", "[8]百度","[4]腾讯混元","[免费]DSR1+Qwen3"]
     elif platform == "deepseek":
         return ["deepseek-chat", "deepseek-llm-7b-chat", "deepseek-coder"]
     else:
@@ -467,7 +468,7 @@ class APISettingsDialog:
 class StoryGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("文学创作辅助V3.3")
+        self.root.title("文学创作辅助V3.4")
         self.root.geometry("1000x700")
         
         # 创建存储目录
@@ -519,7 +520,7 @@ class StoryGeneratorApp:
         title_frame = tk.Frame(self.root)
         title_frame.pack(fill=tk.X, pady=10, padx=10)
         
-        title_label = tk.Label(title_frame, text="文学创作辅助工具V3.3", font=('Arial', 16, 'bold'))
+        title_label = tk.Label(title_frame, text="文学创作辅助工具V3.4", font=('Arial', 16, 'bold'))
         title_label.pack(side=tk.LEFT)
         
         # 设置按钮
@@ -740,6 +741,10 @@ class StoryGeneratorApp:
         self.start_generate_button = tk.Button(button_frame, text="开始生成", command=self.generate_story, bg="#4CAF50", fg="white", padx=20)
         self.start_generate_button.pack(side="left", padx=10)
         
+        # 添加重置按钮
+        self.reset_button = tk.Button(button_frame, text="重置", command=self.reset_app, bg="#FF9800", fg="white", padx=20)
+        self.reset_button.pack(side="left", padx=10)
+        
         exit_button = tk.Button(button_frame, text="退出", command=self.root.quit, bg="#f44336", fg="white", padx=20)
         exit_button.pack(side="left", padx=10)
         
@@ -762,9 +767,6 @@ class StoryGeneratorApp:
         # 按钮框架
         button_frame = tk.Frame(self.step2_frame)
         button_frame.pack(pady=20)
-        
-        prev_button = tk.Button(button_frame, text="上一步", command=self.prev_step, bg="#FF9800", fg="white", padx=20)
-        prev_button.pack(side="left", padx=10)
         
         self.regenerate_topic_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_topic, bg="#2196F3", fg="white", padx=20)
         self.regenerate_topic_button.pack(side="left", padx=10)
@@ -797,9 +799,6 @@ class StoryGeneratorApp:
         button_frame = tk.Frame(self.step3_frame)
         button_frame.pack(pady=20)
         
-        prev_button = tk.Button(button_frame, text="上一步", command=self.prev_step, bg="#FF9800", fg="white", padx=20)
-        prev_button.pack(side="left", padx=10)
-        
         self.regenerate_characters_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_characters, bg="#2196F3", fg="white", padx=20)
         self.regenerate_characters_button.pack(side="left", padx=10)
         
@@ -831,9 +830,6 @@ class StoryGeneratorApp:
         button_frame = tk.Frame(self.step4_frame)
         button_frame.pack(pady=20)
         
-        prev_button = tk.Button(button_frame, text="上一步", command=self.prev_step, bg="#FF9800", fg="white", padx=20)
-        prev_button.pack(side="left", padx=10)
-        
         self.regenerate_outline_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_outline, bg="#2196F3", fg="white", padx=20)
         self.regenerate_outline_button.pack(side="left", padx=10)
         
@@ -864,9 +860,6 @@ class StoryGeneratorApp:
         # 按钮框架
         button_frame = tk.Frame(self.step5_frame)
         button_frame.pack(pady=20)
-        
-        prev_button = tk.Button(button_frame, text="上一步", command=self.prev_step, bg="#FF9800", fg="white", padx=20)
-        prev_button.pack(side="left", padx=10)
         
         self.regenerate_detailed_outline_button = tk.Button(button_frame, text="重新生成", command=self._save_outline_and_continue_impl, bg="#2196F3", fg="white", padx=20)
         self.regenerate_detailed_outline_button.pack(side="left", padx=10)
@@ -924,9 +917,6 @@ class StoryGeneratorApp:
         button_frame = tk.Frame(self.step6_frame)
         button_frame.pack(pady=20)
         
-        prev_button = tk.Button(button_frame, text="上一步", command=self.prev_step, bg="#FF9800", fg="white", padx=20)
-        prev_button.pack(side="left", padx=10)
-        
         self.regenerate_content_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_content, bg="#2196F3", fg="white", padx=20)
         self.regenerate_content_button.pack(side="left", padx=10)
         
@@ -970,9 +960,6 @@ class StoryGeneratorApp:
         # 按钮框架
         button_frame = tk.Frame(self.step7_frame)
         button_frame.pack(pady=20)
-        
-        prev_button = tk.Button(button_frame, text="上一步", command=self.prev_step, bg="#FF9800", fg="white", padx=20)
-        prev_button.pack(side="left", padx=10)
         
         self.regenerate_title_and_intro_button = tk.Button(button_frame, text="重新生成", command=self.regenerate_title_and_intro, bg="#2196F3", fg="white", padx=20)
         self.regenerate_title_and_intro_button.pack(side="left", padx=10)
@@ -1041,6 +1028,30 @@ class StoryGeneratorApp:
         # 重新启用开始生成按钮
         self.start_generate_button.config(state=tk.NORMAL)
         
+    def reset_app(self):
+        """
+        重置应用状态，清除上次生成的所有数据
+        """
+        # 重置状态变量
+        self.story_dir = ""
+        self.current_step = 0
+        self.user_inputs = {}
+        self.generated_content = {}
+        self.is_interrupted = False
+        self.current_generation_state = {}
+        
+        # 清空灵感输入
+        self.inspiration_text.delete("1.0", tk.END)
+        
+        # 重置选择之前记录的下拉框
+        self.previous_story_var.set("")
+        
+        # 重置到第一步
+        self.notebook.select(self.step1_frame)
+        
+        # 显示重置成功提示
+        messagebox.showinfo("提示", "应用状态已重置，可以开始新的创作。")
+        
     def reload_prompts_by_story_type(self, story_type):
         """
         根据故事类型重新加载提示词
@@ -1093,6 +1104,9 @@ class StoryGeneratorApp:
         self.save_topic_button.config(state=tk.NORMAL)
         self.regenerate_topic_button.config(state=tk.NORMAL)
         
+        # 自动开始倒计时，倒计时结束后自动执行保存并继续
+        self.root.after(0, lambda: self._start_countdown(self.save_topic_button, self._save_topic_and_continue_impl))
+        
     def regenerate_topic(self):
         # 清空原有内容
         self.topic_text.delete(1.0, tk.END)
@@ -1113,7 +1127,7 @@ class StoryGeneratorApp:
         
         with open(os.path.join(self.story_dir, "topic.txt"), "w", encoding="utf-8") as f:
             f.write(f"故事类型：{story_type}\n")
-            f.write(f"困境类型：{dilemma_type}\n")
+            f.write(f"开局困境：{dilemma_type}\n")
             f.write(f"情绪类型：{emotion_type}\n")
             f.write(f"投稿平台：{platform}\n")
             f.write(f"灵感：{inspiration}\n")
@@ -1132,7 +1146,34 @@ class StoryGeneratorApp:
         # 禁用按钮
         button.config(state=tk.DISABLED)
         
+        # 创建中断标志
+        countdown_interrupted = [False]
+        
+        # 创建中断按钮
+        interrupt_button = tk.Button(button.master, text="中断倒计时", bg="#f44336", fg="white", padx=10)
+        
+        def interrupt_countdown():
+            # 设置中断标志
+            countdown_interrupted[0] = True
+            # 恢复按钮状态
+            button.config(text=original_text, state=original_state)
+            # 移除中断按钮
+            interrupt_button.destroy()
+        
+        # 绑定中断函数到中断按钮
+        interrupt_button.config(command=interrupt_countdown)
+        
+        # 将中断按钮放置在保存按钮旁边
+        # 首先获取保存按钮的位置
+        save_button_info = button.pack_info()
+        # 放置中断按钮
+        interrupt_button.pack(side=save_button_info.get("side", "left"), padx=5)
+        
         def countdown(count):
+            if countdown_interrupted[0]:
+                # 倒计时已中断，不再继续
+                return
+            
             if count > 0:
                 # 更新按钮文本显示倒计时
                 button.config(text=f"{original_text}({count}s)")
@@ -1141,6 +1182,8 @@ class StoryGeneratorApp:
             else:
                 # 倒计时结束，恢复按钮状态并调用目标函数
                 button.config(text=original_text, state=original_state)
+                # 移除中断按钮
+                interrupt_button.destroy()
                 target_function()
         
         # 开始倒计时
@@ -1219,6 +1262,9 @@ class StoryGeneratorApp:
         self.save_characters_button.config(state=tk.NORMAL)
         self.regenerate_characters_button.config(state=tk.NORMAL)
         
+        # 自动开始倒计时，倒计时结束后自动执行保存并继续
+        self.root.after(0, lambda: self._start_countdown(self.save_characters_button, self._save_characters_and_continue_impl))
+        
     def regenerate_characters(self):
         # 清空原有内容
         self.characters_text.delete(1.0, tk.END)
@@ -1294,6 +1340,9 @@ class StoryGeneratorApp:
         # 重新启用按钮
         self.save_outline_button.config(state=tk.NORMAL)
         self.regenerate_outline_button.config(state=tk.NORMAL)
+        
+        # 自动开始倒计时，倒计时结束后自动执行保存并继续
+        self.root.after(0, lambda: self._start_countdown(self.save_outline_button, self._save_outline_and_continue_impl))
         
     def regenerate_outline(self):
         # 清空原有内容
@@ -1533,6 +1582,9 @@ class StoryGeneratorApp:
         self.save_detailed_outline_button.config(state=tk.NORMAL)
         self.regenerate_detailed_outline_button.config(state=tk.NORMAL)
         
+        # 自动开始倒计时，倒计时结束后自动执行保存并继续
+        self.root.after(0, lambda: self._start_countdown(self.save_detailed_outline_button, self._save_detailed_outline_and_continue_impl))
+        
     def regenerate_detailed_outline(self):
         # 清空原有内容
         self.detailed_outline_text.delete(1.0, tk.END)
@@ -1677,6 +1729,10 @@ class StoryGeneratorApp:
             # 重新启用按钮
             self.root.after(0, lambda: self.save_detailed_outline_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.regenerate_detailed_outline_button.config(state=tk.NORMAL))
+            
+            # 如果不是中断，自动开始倒计时，倒计时结束后自动执行保存并继续
+            if not self.is_interrupted:
+                self.root.after(0, lambda: self._start_countdown(self.save_detailed_outline_button, self._save_detailed_outline_and_continue_impl))
         
     def save_detailed_outline(self):
         # 仅保存细纲，不继续到下一步
@@ -1962,6 +2018,9 @@ class StoryGeneratorApp:
         # 重新启用按钮
         self.save_content_button.config(state=tk.NORMAL)
         self.regenerate_content_button.config(state=tk.NORMAL)
+        
+        # 自动开始倒计时，倒计时结束后自动执行保存并继续
+        self.root.after(0, lambda: self._start_countdown(self.save_content_button, self._save_content_and_continue_impl))
         
     def _parse_detailed_outline_by_conflict(self, detailed_outline):
         """
@@ -2422,6 +2481,9 @@ class StoryGeneratorApp:
         self.save_title_and_intro_and_finish_button.config(state=tk.NORMAL)
         self.regenerate_title_and_intro_button.config(state=tk.NORMAL)
         
+        # 自动开始倒计时，倒计时结束后自动执行保存并完成
+        self.root.after(0, lambda: self._start_countdown(self.save_title_and_intro_and_finish_button, self._save_title_and_intro_and_finish_impl))
+        
     def regenerate_title_and_intro(self):
         # 清空原有内容
         self.title_text.delete(1.0, tk.END)
@@ -2447,6 +2509,10 @@ class StoryGeneratorApp:
         messagebox.showinfo("保存成功", "标题和导语已成功保存！")
         
     def save_title_and_intro_and_finish(self):
+        # 使用倒计时功能
+        self._start_countdown(self.save_title_and_intro_and_finish_button, self._save_title_and_intro_and_finish_impl)
+        
+    def _save_title_and_intro_and_finish_impl(self):
         # 保存标题和导语
         title = self.title_text.get("1.0", tk.END).strip()
         intro = self.intro_text.get("1.0", tk.END).strip()

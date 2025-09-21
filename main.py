@@ -69,7 +69,8 @@ def load_config():
             "base_url": "",
             "siliconflow_api_key": "",
             "deepseek_api_key": "",
-            "content_size_min": 1000  # 默认字数限制
+            "content_size_min": 500,  # 默认字数限制
+            "auto_continue": True  # 默认开启自动继续执行
         }
         # 尝试保存默认配置
         try:
@@ -92,10 +93,10 @@ def load_config():
                 print(f"已从用户目录配置文件{alt_config_path}加载配置")
             except Exception as e:
                 print(f"从用户目录读取配置失败: {e}")
-                config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": "", "content_size_min": 750}
+                config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": "", "content_size_min": 750, "auto_continue": True}
         else:
             print("用户目录也没有配置文件，将使用默认配置")
-            config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": "", "content_size_min": 750}
+            config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": "", "content_size_min": 750, "auto_continue": True}
     except Exception as e:
         print(f"读取配置文件时发生错误: {e}")
         config = {"api_key": "", "base_url": "", "siliconflow_api_key": "", "deepseek_api_key": "", "content_size_min": 750}
@@ -285,18 +286,18 @@ if not platform_model_configs:
 def load_prompts(story_type=None):
     prompts = {}
     prompt_files = [
-        "topic.prompt",
-        "outline.prompt",
-        "detailed_outline_first.prompt",
-        "detailed_outline_subsequent.prompt",
-        "content_first.prompt",
-        "content_subsequent.prompt",
-        "content_last.prompt",  # 添加最后的提示词文件
-        "title.prompt",
-        "intro.prompt",
-        "protagonist.prompt",
-        "antagonist.prompt",
-        "supporting.prompt"
+        "选题.prompt",
+        "粗纲.prompt",
+        "细纲首段.prompt",
+        "细纲后续.prompt",
+        "正文首段.prompt",
+        "正文后续.prompt",
+        "正文末尾.prompt", 
+        "标题.prompt",
+        "导语.prompt",
+        "人设-主角.prompt",
+        "人设-反派.prompt",
+        "人设-异性主角.prompt"
     ]
     
     # 确定提示词目录
@@ -414,6 +415,14 @@ class APISettingsDialog:
         self.content_size_entry = tk.Entry(content_size_frame, textvariable=self.content_size_var, width=10)
         self.content_size_entry.pack(side=tk.LEFT)
         
+        # 自动继续执行开关
+        auto_continue_frame = tk.Frame(frame)
+        auto_continue_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.auto_continue_var = tk.BooleanVar(value=self.config_data.get("auto_continue", False))
+        self.auto_continue_checkbox = tk.Checkbutton(auto_continue_frame, text="自动继续执行", variable=self.auto_continue_var)
+        self.auto_continue_checkbox.pack(side=tk.LEFT, padx=(0, 10))
+        
         # 按钮框架
         button_frame = tk.Frame(frame)
         button_frame.pack(fill=tk.X, pady=(20, 0))
@@ -438,11 +447,18 @@ class APISettingsDialog:
         self.deepseek_entry.config(show=show)
     
     def save_settings(self):
-        # 更新配置数据
+        # 保存配置数据
         self.config_data["api_key"] = self.api_key_var.get()
         self.config_data["base_url"] = self.base_url_var.get()
         self.config_data["siliconflow_api_key"] = self.siliconflow_var.get()
         self.config_data["deepseek_api_key"] = self.deepseek_var.get()
+        
+        # 检查自动继续设置是否发生变化
+        auto_continue_changed = False
+        if "auto_continue" in self.config_data:
+            if self.config_data["auto_continue"] != self.auto_continue_var.get():
+                auto_continue_changed = True
+        self.config_data["auto_continue"] = self.auto_continue_var.get()
         
         # 验证字数限制
         try:
@@ -457,10 +473,24 @@ class APISettingsDialog:
         
         # 保存配置
         if save_config(self.config_data):
-            messagebox.showinfo("成功", "API设置已保存")
-            # 更新全局配置
+            # 如果自动继续设置发生了变化，提示需要重启
+            if auto_continue_changed:
+                import sys, os
+                result = messagebox.askyesno("提示", "自动继续设置已更改，需要重启应用程序才能生效。\n是否立即重启？")
+                if result:
+                    # 重启应用程序
+                    self.dialog.destroy()
+                    self.parent.destroy()
+                    python = sys.executable
+                    os.execl(python, python, *sys.argv)
+            else:
+                messagebox.showinfo("成功", "API设置已保存")
+            # 更新全局配置，确保所有地方都使用最新的配置
             global config
-            config = self.config_data
+            config = self.config_data.copy()  # 创建副本以确保完整更新
+            # 如果父窗口是StoryGeneratorApp实例，通知其配置已更新
+            if hasattr(self.parent, 'on_config_updated'):
+                self.parent.on_config_updated(config)
             self.dialog.destroy()
         else:
             messagebox.showerror("错误", "保存API设置失败")
@@ -468,7 +498,7 @@ class APISettingsDialog:
 class StoryGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("文学创作辅助V3.4")
+        self.root.title("文学创作辅助V3.5")
         self.root.geometry("1000x700")
         
         # 创建存储目录
@@ -492,8 +522,27 @@ class StoryGeneratorApp:
         self.is_interrupted = False
         self.current_generation_state = {}
         
+        # 应用程序配置缓存
+        self.app_config = config.copy()
+        
         # 创建界面
         self.create_widgets()
+        
+    def on_config_updated(self, new_config):
+        """
+        当配置更新时调用的方法
+        
+        Args:
+            new_config: 新的配置字典
+        """
+        self.app_config = new_config.copy()
+        # 更新全局变量
+        global config
+        config = new_config.copy()
+        print(f"应用配置已更新: auto_continue={new_config.get('auto_continue', True)}")
+        # 更新内容最小字数限制
+        global CONTENT_SIZE_MIN
+        CONTENT_SIZE_MIN = new_config.get("content_size_min", 750)
         
     def add_context_menu(self, text_widget):
         """为文本输入框添加右键菜单（复制、粘贴）和确保撤销功能正常"""
@@ -520,7 +569,7 @@ class StoryGeneratorApp:
         title_frame = tk.Frame(self.root)
         title_frame.pack(fill=tk.X, pady=10, padx=10)
         
-        title_label = tk.Label(title_frame, text="文学创作辅助工具V3.4", font=('Arial', 16, 'bold'))
+        title_label = tk.Label(title_frame, text="文学创作辅助工具V3.5", font=('Arial', 16, 'bold'))
         title_label.pack(side=tk.LEFT)
         
         # 设置按钮
@@ -1086,7 +1135,7 @@ class StoryGeneratorApp:
         inspiration = self.user_inputs["inspiration"]
         
         # 从配置文件中获取提示词模板并替换变量
-        prompt_template = prompts["topic"]
+        prompt_template = prompts["选题"]
         prompt = prompt_template.format(story_type=story_type, inspiration=inspiration, dilemma_type=dilemma_type, emotion_type=emotion_type)
         
         # 调用OpenAI API生成选题，增加max_tokens以确保完整输出
@@ -1104,8 +1153,9 @@ class StoryGeneratorApp:
         self.save_topic_button.config(state=tk.NORMAL)
         self.regenerate_topic_button.config(state=tk.NORMAL)
         
-        # 自动开始倒计时，倒计时结束后自动执行保存并继续
-        self.root.after(0, lambda: self._start_countdown(self.save_topic_button, self._save_topic_and_continue_impl))
+        # 检查是否开启自动继续执行，如果开启则自动开始倒计时
+        if self.app_config.get("auto_continue", False):
+            self.root.after(0, lambda: self._start_countdown(self.save_topic_button, self._save_topic_and_continue_impl))
         
     def regenerate_topic(self):
         # 清空原有内容
@@ -1125,7 +1175,7 @@ class StoryGeneratorApp:
         emotion_type = self.user_inputs.get("emotion_type", "")
         inspiration = self.user_inputs.get("inspiration", "")
         
-        with open(os.path.join(self.story_dir, "topic.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "选题.txt"), "w", encoding="utf-8") as f:
             f.write(f"故事类型：{story_type}\n")
             f.write(f"开局困境：{dilemma_type}\n")
             f.write(f"情绪类型：{emotion_type}\n")
@@ -1190,8 +1240,13 @@ class StoryGeneratorApp:
         countdown(countdown_seconds)
     
     def save_topic_and_continue(self):
-        # 使用倒计时功能
-        self._start_countdown(self.save_topic_button, self._save_topic_and_continue_impl)
+        # 检查是否开启自动继续执行
+        if self.app_config.get("auto_continue", False):
+            # 开启时使用倒计时功能
+            self._start_countdown(self.save_topic_button, self._save_topic_and_continue_impl)
+        else:
+            # 关闭时直接执行保存并继续的实现函数
+            self._save_topic_and_continue_impl()
     
     def _save_topic_and_continue_impl(self):
         # 保存选题
@@ -1205,7 +1260,7 @@ class StoryGeneratorApp:
         emotion_type = self.user_inputs["emotion_type"]
         inspiration = self.user_inputs["inspiration"]
         
-        with open(os.path.join(self.story_dir, "topic.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "选题.txt"), "w", encoding="utf-8") as f:
             f.write(f"故事类型：{story_type}\n")
             f.write(f"困境类型：{dilemma_type}\n")
             f.write(f"情绪类型：{emotion_type}\n")
@@ -1237,9 +1292,9 @@ class StoryGeneratorApp:
         base_prompt = f"你是短故事专家,擅长投稿到{platform},协助进行人物设定\n\n"
         
         # 从prompts字典获取各个角色的提示词
-        protagonist_prompt = prompts.get("protagonist", "").format(topic=topic)
-        antagonist_prompt = prompts.get("antagonist", "")
-        supporting_prompt = prompts.get("supporting", "")
+        protagonist_prompt = prompts.get("人设-主角", "").format(topic=topic)
+        antagonist_prompt = prompts.get("人设-反派", "")
+        supporting_prompt = prompts.get("人设-异性主角", "")
         
         # 构建连续上下文的提示词
         characters_prompt = base_prompt + protagonist_prompt + "\n\n" + antagonist_prompt + "\n\n" + supporting_prompt
@@ -1262,8 +1317,9 @@ class StoryGeneratorApp:
         self.save_characters_button.config(state=tk.NORMAL)
         self.regenerate_characters_button.config(state=tk.NORMAL)
         
-        # 自动开始倒计时，倒计时结束后自动执行保存并继续
-        self.root.after(0, lambda: self._start_countdown(self.save_characters_button, self._save_characters_and_continue_impl))
+        # 检查是否开启自动继续执行，如果开启则自动开始倒计时
+        if self.app_config.get("auto_continue", False):
+            self.root.after(0, lambda: self._start_countdown(self.save_characters_button, self._save_characters_and_continue_impl))
         
     def regenerate_characters(self):
         # 清空原有内容
@@ -1280,14 +1336,19 @@ class StoryGeneratorApp:
         self.save_generated_content_to_json()
         
         # 保存人物设定到文件
-        with open(os.path.join(self.story_dir, "characters.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "人设.txt"), "w", encoding="utf-8") as f:
             f.write(characters)
         
         messagebox.showinfo("保存成功", "人物设定已成功保存！")
         
     def save_characters_and_continue(self):
-        # 使用倒计时功能
-        self._start_countdown(self.save_characters_button, self._save_characters_and_continue_impl)
+        # 检查是否开启自动继续执行
+        if self.app_config.get("auto_continue", False):
+            # 开启时使用倒计时功能
+            self._start_countdown(self.save_characters_button, self._save_characters_and_continue_impl)
+        else:
+            # 关闭时直接执行保存并继续的实现函数
+            self._save_characters_and_continue_impl()
     
     def _save_characters_and_continue_impl(self):
         # 保存人物设定
@@ -1297,7 +1358,7 @@ class StoryGeneratorApp:
         self.save_generated_content_to_json()
         
         # 保存人物设定到文件
-        with open(os.path.join(self.story_dir, "characters.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "人设.txt"), "w", encoding="utf-8") as f:
             f.write(characters)
         
         # 继续生成粗纲
@@ -1319,7 +1380,7 @@ class StoryGeneratorApp:
         characters = self.generated_content.get("characters", "未生成人物设定")
         
         # 从配置文件中获取提示词模板并替换变量
-        prompt_template = prompts["outline"]
+        prompt_template = prompts["粗纲"]
         prompt = prompt_template.format(topic=topic, characters=characters)
         
         # 调用OpenAI API生成粗纲
@@ -1341,8 +1402,9 @@ class StoryGeneratorApp:
         self.save_outline_button.config(state=tk.NORMAL)
         self.regenerate_outline_button.config(state=tk.NORMAL)
         
-        # 自动开始倒计时，倒计时结束后自动执行保存并继续
-        self.root.after(0, lambda: self._start_countdown(self.save_outline_button, self._save_outline_and_continue_impl))
+        # 检查是否开启自动继续执行，如果开启则自动开始倒计时
+        if self.app_config.get("auto_continue", False):
+            self.root.after(0, lambda: self._start_countdown(self.save_outline_button, self._save_outline_and_continue_impl))
         
     def regenerate_outline(self):
         # 清空原有内容
@@ -1359,14 +1421,19 @@ class StoryGeneratorApp:
         self.save_generated_content_to_json()
         
         # 保存粗纲到文件
-        with open(os.path.join(self.story_dir, "outline.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "粗纲.txt"), "w", encoding="utf-8") as f:
             f.write(outline)
         
         messagebox.showinfo("保存成功", "粗纲已成功保存！")
         
     def save_outline_and_continue(self):
-        # 使用倒计时功能
-        self._start_countdown(self.save_outline_button, self._save_outline_and_continue_impl)
+        # 检查是否开启自动继续执行
+        if self.app_config.get("auto_continue", False):
+            # 开启时使用倒计时功能
+            self._start_countdown(self.save_outline_button, self._save_outline_and_continue_impl)
+        else:
+            # 关闭时直接执行保存并继续的实现函数
+            self._save_outline_and_continue_impl()
     
     def _save_outline_and_continue_impl(self):
         # 保存粗纲
@@ -1376,7 +1443,7 @@ class StoryGeneratorApp:
         self.save_generated_content_to_json()
         
         # 保存粗纲到文件
-        with open(os.path.join(self.story_dir, "outline.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "粗纲.txt"), "w", encoding="utf-8") as f:
             f.write(outline)
         
         # 继续生成细纲
@@ -1453,6 +1520,10 @@ class StoryGeneratorApp:
         # 提取粗纲转细纲方法
         def convert_to_detailed_outline(prompt_template_name, outline_content, is_first=False):
             # 根据模板名称获取对应的提示词模板
+            if prompt_template_name == "detailed_outline_first":
+                prompt_template_name = "细纲首段"
+            elif prompt_template_name == "detailed_outline_subsequent":
+                prompt_template_name = "细纲后续"
             prompt_template = prompts[prompt_template_name]
             
             # 根据是否是第一个元素选择不同的格式化参数
@@ -1582,8 +1653,9 @@ class StoryGeneratorApp:
         self.save_detailed_outline_button.config(state=tk.NORMAL)
         self.regenerate_detailed_outline_button.config(state=tk.NORMAL)
         
-        # 自动开始倒计时，倒计时结束后自动执行保存并继续
-        self.root.after(0, lambda: self._start_countdown(self.save_detailed_outline_button, self._save_detailed_outline_and_continue_impl))
+        # 检查是否开启自动继续执行，如果开启则自动开始倒计时
+        if self.app_config.get("auto_continue", False):
+            self.root.after(0, lambda: self._start_countdown(self.save_detailed_outline_button, self._save_detailed_outline_and_continue_impl))
         
     def regenerate_detailed_outline(self):
         # 清空原有内容
@@ -1627,6 +1699,10 @@ class StoryGeneratorApp:
             # 提取粗纲转细纲方法
             def convert_to_detailed_outline(prompt_template_name, outline_content, is_first=False):
                 # 根据模板名称获取对应的提示词模板
+                if prompt_template_name == "detailed_outline_first":
+                    prompt_template_name = "细纲首段"
+                elif prompt_template_name == "detailed_outline_subsequent":
+                    prompt_template_name = "细纲后续"
                 prompt_template = prompts[prompt_template_name]
                 
                 # 根据是否是第一个元素选择不同的格式化参数
@@ -1730,8 +1806,8 @@ class StoryGeneratorApp:
             self.root.after(0, lambda: self.save_detailed_outline_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.regenerate_detailed_outline_button.config(state=tk.NORMAL))
             
-            # 如果不是中断，自动开始倒计时，倒计时结束后自动执行保存并继续
-            if not self.is_interrupted:
+            # 如果不是中断，检查是否开启自动继续执行，如果开启则自动开始倒计时
+            if not self.is_interrupted and self.app_config.get("auto_continue", False):
                 self.root.after(0, lambda: self._start_countdown(self.save_detailed_outline_button, self._save_detailed_outline_and_continue_impl))
         
     def save_detailed_outline(self):
@@ -1743,14 +1819,19 @@ class StoryGeneratorApp:
         self.save_generated_content_to_json()
         
         # 保存细纲到文件
-        with open(os.path.join(self.story_dir, "detailed_outline.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "细纲.txt"), "w", encoding="utf-8") as f:
             f.write(detailed_outline)
         
         messagebox.showinfo("保存成功", "细纲已成功保存！")
         
     def save_detailed_outline_and_continue(self):
-        # 使用倒计时功能
-        self._start_countdown(self.save_detailed_outline_button, self._save_detailed_outline_and_continue_impl)
+        # 检查是否开启自动继续执行
+        if self.app_config.get("auto_continue", False):
+            # 开启时使用倒计时功能
+            self._start_countdown(self.save_detailed_outline_button, self._save_detailed_outline_and_continue_impl)
+        else:
+            # 关闭时直接执行保存并继续的实现函数
+            self._save_detailed_outline_and_continue_impl()
     
     def _save_detailed_outline_and_continue_impl(self):
         # 保存细纲
@@ -1760,7 +1841,7 @@ class StoryGeneratorApp:
         self.save_generated_content_to_json()
         
         # 保存细纲到文件
-        with open(os.path.join(self.story_dir, "detailed_outline.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "细纲.txt"), "w", encoding="utf-8") as f:
             f.write(detailed_outline)
         
         # 继续生成正文
@@ -1861,7 +1942,7 @@ class StoryGeneratorApp:
                 selected_detailed_outline = detailed_outline_lines[0]
                 
                 # 从配置文件中获取第一组提示词模板并替换变量
-                prompt_template = prompts["content_first"]
+                prompt_template = prompts["正文首段"]
                 prompt = prompt_template.format(characters=characters, topic=topic,selected_detailed_outline=selected_detailed_outline,detailed_outline=detailed_outline)
                 
                 # 调用API生成正文，传递当前步骤
@@ -1926,13 +2007,13 @@ class StoryGeneratorApp:
                 selected_detailed_outline = detailed_outline_lines[i]
                 print(selected_detailed_outline+"\n")
                 # 判断是否为最后一次循环，决定使用哪个提示词模板
-                if i == len(detailed_outline_lines) - 1 and prompts.get("content_last"):
-                    # 最后一次循环，使用content_last.prompt
-                    prompt_template = prompts["content_last"]
+                if i == len(detailed_outline_lines) - 1 and prompts.get("正文末尾"):
+                    # 最后一次循环，使用正文末尾.prompt
+                    prompt_template = prompts["正文末尾"]
                     print("使用content_last.prompt生成最后一部分内容")
                 else:
-                    # 不是最后一次循环，使用content_subsequent.prompt
-                    prompt_template = prompts["content_subsequent"]
+                    # 不是最后一次循环，使用正文后续.prompt
+                    prompt_template = prompts["正文后续"]
                 prompt = prompt_template.format(topic=topic, characters=characters, min_size=CONTENT_SIZE_MIN,selected_detailed_outline=selected_detailed_outline)
                 
                 # 调用API生成正文，传递当前步骤
@@ -2000,7 +2081,7 @@ class StoryGeneratorApp:
         
         # 合并所有正文部分
         # 为每个段落添加带补零的章节号
-        numbered_content_parts = [f"{idx+1:03d}\n{part}" for idx, part in enumerate(content_parts)]
+        numbered_content_parts = [f"\n\n{idx+1:03d}\n{part}" for idx, part in enumerate(content_parts)]
         content = "\n".join(numbered_content_parts)
         
         # 保存生成的内容
@@ -2019,8 +2100,9 @@ class StoryGeneratorApp:
         self.save_content_button.config(state=tk.NORMAL)
         self.regenerate_content_button.config(state=tk.NORMAL)
         
-        # 自动开始倒计时，倒计时结束后自动执行保存并继续
-        self.root.after(0, lambda: self._start_countdown(self.save_content_button, self._save_content_and_continue_impl))
+        # 检查是否开启自动继续执行，如果开启则自动开始倒计时
+        if self.app_config.get("auto_continue", False):
+            self.root.after(0, lambda: self._start_countdown(self.save_content_button, self._save_content_and_continue_impl))
         
     def _parse_detailed_outline_by_conflict(self, detailed_outline):
         """
@@ -2293,13 +2375,13 @@ class StoryGeneratorApp:
                 selected_detailed_outline = detailed_outline_lines[i]
                 print(selected_detailed_outline+"\n")
                 # 判断是否为最后一次循环，决定使用哪个提示词模板
-                if i == len(detailed_outline_lines) - 1 and prompts.get("content_last"):
-                    # 最后一次循环，使用content_last.prompt
-                    prompt_template = prompts["content_last"]
+                if i == len(detailed_outline_lines) - 1 and prompts.get("正文末尾"):
+                    # 最后一次循环，使用正文末尾.prompt
+                    prompt_template = prompts["正文末尾"]
                     print("使用content_last.prompt生成最后一部分内容")
                 else:
-                    # 不是最后一次循环，使用content_subsequent.prompt
-                    prompt_template = prompts["content_subsequent"]
+                    # 不是最后一次循环，使用正文后续.prompt
+                    prompt_template = prompts["正文后续"]
                 prompt = prompt_template.format(topic=topic, characters=characters, min_size=CONTENT_SIZE_MIN, selected_detailed_outline=selected_detailed_outline)
                 
                 # 调用API生成正文，传递当前步骤
@@ -2332,7 +2414,7 @@ class StoryGeneratorApp:
             if i >= len(detailed_outline_lines) - 1 and not self.is_interrupted:
                 # 合并所有正文部分
                 # 为每个段落添加带补零的章节号
-                numbered_content_parts = [f"{idx+1:03d}\n{part}" for idx, part in enumerate(content_parts)]
+                numbered_content_parts = [f"\n\n{idx+1:03d}\n{part}" for idx, part in enumerate(content_parts)]
                 content = "\n".join(numbered_content_parts)
                 
                 # 保存生成的内容
@@ -2379,15 +2461,20 @@ class StoryGeneratorApp:
         # 保存到JSON文件
         self.save_generated_content_to_json()
         
-        # 保存正文到文件
-        with open(os.path.join(self.story_dir, "content.txt"), "w", encoding="utf-8") as f:
+        # 保存正文到文件（使用中文文件名）
+        with open(os.path.join(self.story_dir, "正文.txt"), "w", encoding="utf-8") as f:
             f.write(content)
         
         messagebox.showinfo("保存成功", "正文已成功保存！")
         
     def save_content_and_continue(self):
-        # 使用倒计时功能
-        self._start_countdown(self.save_content_button, self._save_content_and_continue_impl)
+        # 检查是否开启自动继续执行
+        if self.app_config.get("auto_continue", False):
+            # 开启时使用倒计时功能
+            self._start_countdown(self.save_content_button, self._save_content_and_continue_impl)
+        else:
+            # 关闭时直接执行保存并继续的实现函数
+            self._save_content_and_continue_impl()
     
     def _save_content_and_continue_impl(self):
         # 保存正文
@@ -2396,8 +2483,8 @@ class StoryGeneratorApp:
         # 保存到JSON文件
         self.save_generated_content_to_json()
         
-        # 保存正文到文件
-        with open(os.path.join(self.story_dir, "content.txt"), "w", encoding="utf-8") as f:
+        # 保存正文到文件（使用中文文件名）
+        with open(os.path.join(self.story_dir, "正文.txt"), "w", encoding="utf-8") as f:
             f.write(content)
         
         # 继续生成标题和导语
@@ -2445,7 +2532,7 @@ class StoryGeneratorApp:
         detailed_outline = self.generated_content.get("detailed_outline", "未生成细纲")
         
         # 生成标题
-        title_prompt_template = prompts["title"]
+        title_prompt_template = prompts["标题"]
         # 使用细纲代替正文生成标题
         title_prompt = title_prompt_template.format(topic=topic, characters=characters, content=detailed_outline)
         
@@ -2454,7 +2541,7 @@ class StoryGeneratorApp:
         title = title.strip()
         
         # 生成导语
-        intro_prompt_template = prompts["intro"]
+        intro_prompt_template = prompts["导语"]
         # 使用细纲代替正文生成导语
         intro_prompt = intro_prompt_template.format(topic=topic, characters=characters, content=detailed_outline)
         
@@ -2481,8 +2568,9 @@ class StoryGeneratorApp:
         self.save_title_and_intro_and_finish_button.config(state=tk.NORMAL)
         self.regenerate_title_and_intro_button.config(state=tk.NORMAL)
         
-        # 自动开始倒计时，倒计时结束后自动执行保存并完成
-        self.root.after(0, lambda: self._start_countdown(self.save_title_and_intro_and_finish_button, self._save_title_and_intro_and_finish_impl))
+        # 检查是否开启自动继续执行，如果开启则自动开始倒计时
+        if self.app_config.get("auto_continue", False):
+            self.root.after(0, lambda: self._start_countdown(self.save_title_and_intro_and_finish_button, self._save_title_and_intro_and_finish_impl))
         
     def regenerate_title_and_intro(self):
         # 清空原有内容
@@ -2499,7 +2587,7 @@ class StoryGeneratorApp:
         self.generated_content["intro"] = intro
         
         # 保存标题和导语到文本文件
-        with open(os.path.join(self.story_dir, "title_intro.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "标题导语.txt"), "w", encoding="utf-8") as f:
             f.write(f"标题：{title}\n")
             f.write(f"导语：{intro}\n")
         
@@ -2509,8 +2597,13 @@ class StoryGeneratorApp:
         messagebox.showinfo("保存成功", "标题和导语已成功保存！")
         
     def save_title_and_intro_and_finish(self):
-        # 使用倒计时功能
-        self._start_countdown(self.save_title_and_intro_and_finish_button, self._save_title_and_intro_and_finish_impl)
+        # 检查是否开启自动继续执行
+        if self.app_config.get("auto_continue", False):
+            # 开启时使用倒计时功能
+            self._start_countdown(self.save_title_and_intro_and_finish_button, self._save_title_and_intro_and_finish_impl)
+        else:
+            # 关闭时直接执行保存并继续的实现函数
+            self._save_title_and_intro_and_finish_impl()
         
     def _save_title_and_intro_and_finish_impl(self):
         # 保存标题和导语
@@ -2520,7 +2613,7 @@ class StoryGeneratorApp:
         self.generated_content["intro"] = intro
         
         # 保存标题和导语到文本文件
-        with open(os.path.join(self.story_dir, "title_intro.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.story_dir, "标题导语.txt"), "w", encoding="utf-8") as f:
             f.write(f"标题：{title}\n")
             f.write(f"导语：{intro}\n")
         
@@ -2636,32 +2729,47 @@ class StoryGeneratorApp:
                                 "inspiration": inspiration
                             }
                     
-                    # 加载characters.txt
-                    characters_file = os.path.join(self.story_dir, "characters.txt")
+                    # 加载人设文件（优先检查中文文件名，兼容英文文件名）
+                    characters_file = os.path.join(self.story_dir, "人设.txt")
+                    if not os.path.exists(characters_file):
+                        # 如果中文文件名不存在，尝试使用英文文件名
+                        characters_file = os.path.join(self.story_dir, "characters.txt")
                     if os.path.exists(characters_file):
                         with open(characters_file, "r", encoding="utf-8") as f:
                             self.generated_content["characters"] = f.read()
                     
-                    # 加载outline.txt
-                    outline_file = os.path.join(self.story_dir, "outline.txt")
+                    # 加载粗纲文件（优先检查中文文件名，兼容英文文件名）
+                    outline_file = os.path.join(self.story_dir, "粗纲.txt")
+                    if not os.path.exists(outline_file):
+                        # 如果中文文件名不存在，尝试使用英文文件名
+                        outline_file = os.path.join(self.story_dir, "outline.txt")
                     if os.path.exists(outline_file):
                         with open(outline_file, "r", encoding="utf-8") as f:
                             self.generated_content["outline"] = f.read()
                     
-                    # 加载detailed_outline.txt
-                    detailed_outline_file = os.path.join(self.story_dir, "detailed_outline.txt")
+                    # 加载细纲文件（优先检查中文文件名，兼容英文文件名）
+                    detailed_outline_file = os.path.join(self.story_dir, "细纲.txt")
+                    if not os.path.exists(detailed_outline_file):
+                        # 如果中文文件名不存在，尝试使用英文文件名
+                        detailed_outline_file = os.path.join(self.story_dir, "detailed_outline.txt")
                     if os.path.exists(detailed_outline_file):
                         with open(detailed_outline_file, "r", encoding="utf-8") as f:
                             self.generated_content["detailed_outline"] = f.read()
                     
-                    # 加载content.txt
-                    content_file = os.path.join(self.story_dir, "content.txt")
+                    # 加载正文文件（优先检查中文文件名，兼容英文文件名）
+                    content_file = os.path.join(self.story_dir, "正文.txt")
+                    if not os.path.exists(content_file):
+                        # 如果中文文件名不存在，尝试使用英文文件名
+                        content_file = os.path.join(self.story_dir, "content.txt")
                     if os.path.exists(content_file):
                         with open(content_file, "r", encoding="utf-8") as f:
                             self.generated_content["content"] = f.read()
                     
-                    # 加载title_intro.txt
-                    title_intro_file = os.path.join(self.story_dir, "title_intro.txt")
+                    # 加载标题导语文件（优先检查中文文件名，兼容英文文件名）
+                    title_intro_file = os.path.join(self.story_dir, "标题导语.txt")
+                    if not os.path.exists(title_intro_file):
+                        # 如果中文文件名不存在，尝试使用英文文件名
+                        title_intro_file = os.path.join(self.story_dir, "title_intro.txt")
                     if os.path.exists(title_intro_file):
                         with open(title_intro_file, "r", encoding="utf-8") as f:
                             content = f.read()

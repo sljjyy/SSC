@@ -498,7 +498,7 @@ class APISettingsDialog:
 class StoryGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("文学创作辅助V3.5")
+        self.root.title("文学创作辅助V3.6")
         self.root.geometry("1000x700")
         
         # 创建存储目录
@@ -569,7 +569,7 @@ class StoryGeneratorApp:
         title_frame = tk.Frame(self.root)
         title_frame.pack(fill=tk.X, pady=10, padx=10)
         
-        title_label = tk.Label(title_frame, text="文学创作辅助工具V3.5", font=('Arial', 16, 'bold'))
+        title_label = tk.Label(title_frame, text="文学创作辅助工具V3.6", font=('Arial', 16, 'bold'))
         title_label.pack(side=tk.LEFT)
         
         # 设置按钮

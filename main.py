@@ -33,7 +33,7 @@ def save_config(new_config):
         print(f"保存配置失败: {e}")
         return False
 
-TIME_SLEEP = 55
+TIME_SLEEP = 10
 CONTENT_SIZE_MIN = 750
 
 # 防止Windows息屏的辅助函数
@@ -130,12 +130,21 @@ def init_deepseek_client(api_key):
         base_url="https://api.deepseek.com/v1"
     )
 
+# 初始化Google API客户端
+def init_google_client(api_key):
+    return OpenAI(
+        api_key=api_key,
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai"
+    )
+
 # 初始化客户端
 def init_client(platform, api_key, base_url=None):
     if platform == "siliconflow":
         return init_siliconflow_client(api_key)
     elif platform == "deepseek":
         return init_deepseek_client(api_key)
+    elif platform == "google":
+        return init_google_client(api_key)
     else:
         # 使用通用客户端，支持自定义base_url
         return init_openai_client(api_key, base_url if base_url else "https://api.openai.com/v1")
@@ -150,7 +159,10 @@ model_display_names = {
     "[8]DeepseekR1": "deepseek-ai/DeepSeek-R1",
     "[免费]DSR1+Qwen3": "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
     "[8]百度": "baidu/ERNIE-4.5-300B-A47B",
-    "[4]腾讯混元": "tencent/Hunyuan-A13B-Instruct"
+    "[4]腾讯混元": "tencent/Hunyuan-A13B-Instruct",
+    "gemini-2.5-pro": "gemini-2.5-pro",
+    "gemini-2.5-flash": "gemini-2.5-flash",
+    "gemini-2.5-flash-lite": "gemini-2.5-flash-lite"
 }
 
 # 获取平台支持的模型（返回显示名称）
@@ -159,6 +171,8 @@ def get_platform_models(platform):
         return ["[10]千问", "[4]千问长文", "[4]华为盘古","[14]智普清言", "[12]ProDeepseekV3.1", "[8]DeepseekR1", "[8]百度","[4]腾讯混元","[免费]DSR1+Qwen3"]
     elif platform == "deepseek":
         return ["deepseek-chat", "deepseek-llm-7b-chat", "deepseek-coder"]
+    elif platform == "google":
+        return ["gemini-2.5-flash", "gemini-2.5-flash-lite","gemini-2.5-pro"]
     else:
         return ["deepseek-chat"]
 
@@ -404,6 +418,17 @@ class APISettingsDialog:
         self.deepseek_entry = tk.Entry(deepseek_frame, textvariable=self.deepseek_var, width=40, show="*")
         self.deepseek_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
+        # Google API密钥
+        google_frame = tk.Frame(frame)
+        google_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        google_label = tk.Label(google_frame, text="Google API密钥:")
+        google_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.google_var = tk.StringVar(value=self.config_data.get("google_api_key", ""))
+        self.google_entry = tk.Entry(google_frame, textvariable=self.google_var, width=40, show="*")
+        self.google_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
         # 字数限制
         content_size_frame = tk.Frame(frame)
         content_size_frame.pack(fill=tk.X, pady=(0, 10))
@@ -445,6 +470,7 @@ class APISettingsDialog:
         self.api_key_entry.config(show=show)
         self.siliconflow_entry.config(show=show)
         self.deepseek_entry.config(show=show)
+        self.google_entry.config(show=show)
     
     def save_settings(self):
         # 保存配置数据
@@ -452,48 +478,19 @@ class APISettingsDialog:
         self.config_data["base_url"] = self.base_url_var.get()
         self.config_data["siliconflow_api_key"] = self.siliconflow_var.get()
         self.config_data["deepseek_api_key"] = self.deepseek_var.get()
-        
-        # 检查自动继续设置是否发生变化
-        auto_continue_changed = False
-        if "auto_continue" in self.config_data:
-            if self.config_data["auto_continue"] != self.auto_continue_var.get():
-                auto_continue_changed = True
+        self.config_data["google_api_key"] = self.google_var.get()
+        self.config_data["content_size_min"] = int(self.content_size_var.get())
         self.config_data["auto_continue"] = self.auto_continue_var.get()
         
-        # 验证字数限制
-        try:
-            content_size = int(self.content_size_var.get())
-            if content_size < 100:
-                messagebox.showwarning("警告", "字数限制不能小于100")
-                return
-            self.config_data["content_size_min"] = content_size
-        except ValueError:
-            messagebox.showwarning("警告", "字数限制必须是数字")
-            return
+        # 保存到全局配置
+        global config
+        config.update(self.config_data)
         
-        # 保存配置
-        if save_config(self.config_data):
-            # 如果自动继续设置发生了变化，提示需要重启
-            if auto_continue_changed:
-                import sys, os
-                result = messagebox.askyesno("提示", "自动继续设置已更改，需要重启应用程序才能生效。\n是否立即重启？")
-                if result:
-                    # 重启应用程序
-                    self.dialog.destroy()
-                    self.parent.destroy()
-                    python = sys.executable
-                    os.execl(python, python, *sys.argv)
-            else:
-                messagebox.showinfo("成功", "API设置已保存")
-            # 更新全局配置，确保所有地方都使用最新的配置
-            global config
-            config = self.config_data.copy()  # 创建副本以确保完整更新
-            # 如果父窗口是StoryGeneratorApp实例，通知其配置已更新
-            if hasattr(self.parent, 'on_config_updated'):
-                self.parent.on_config_updated(config)
-            self.dialog.destroy()
-        else:
-            messagebox.showerror("错误", "保存API设置失败")
+        # 保存到文件
+        save_config(self.config_data)
+        
+        # 关闭对话框
+        self.dialog.destroy()
 
 class StoryGeneratorApp:
     def __init__(self, root):
@@ -636,9 +633,9 @@ class StoryGeneratorApp:
         platform_label.pack(side="left")
         
         self.platform_vars[step] = tk.StringVar()
-        platforms = ["siliconflow", "deepseek"]
+        platforms = ["siliconflow", "deepseek", "google"]
         platform_combo = ttk.Combobox(api_frame, textvariable=self.platform_vars[step], 
-                                     values=platforms, width=10)
+                                    values=platforms, width=10)
         platform_combo.pack(side="left", padx=(10, 0))
         
         # 设置默认平台
@@ -2178,6 +2175,10 @@ class StoryGeneratorApp:
                     elif platform == "deepseek":
                         # Deepseek平台只需要API密钥
                         api_key = config.get("deepseek_api_key", config["api_key"])
+                        clients[platform] = init_client(platform, api_key)
+                    elif platform == "google":
+                        # Google平台只需要API密钥
+                        api_key = config.get("google_api_key", config["api_key"])
                         clients[platform] = init_client(platform, api_key)
                     else:
                         # 其他平台可能需要base_url
